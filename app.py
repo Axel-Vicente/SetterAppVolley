@@ -40,6 +40,9 @@ class SetterApp:
         self.last_ball: tuple[int, int] | None = None
         self.awaiting_ball_click = False
         self.tracker_template = None
+        self.tracker_template_gray = None
+        self.tracker_patch_radius = 18
+        self.tracker_lost_frames = 0
         self.completed_trails: list[tuple[list[tuple[int, int]], tuple[int, int, int]]] = []
         self.trail_color_index = 0
         self.trail_colors = [(36, 65, 225), (30, 215, 245), (210, 170, 35), (205, 65, 190), (90, 220, 110)]
@@ -116,7 +119,7 @@ class SetterApp:
             if frame_count <= 0: raise ValueError("The video contains no readable frames.")
             if self.cap: self.cap.release()
             self.cap, self.video_path = candidate, path; self.fps, self.frame_count, self.frame_index = fps, frame_count, 0
-            self.trail.clear(); self.completed_trails.clear(); self.last_ball = None; self.tracker_template = None; self.placements.clear(); self.trail_color_index = 0
+            self.trail.clear(); self.completed_trails.clear(); self.last_ball = None; self.tracker_template = None; self.tracker_template_gray = None; self.placements.clear(); self.trail_color_index = 0
             for item in self.table.get_children(): self.table.delete(item)
             self.seek.configure(to=max(1, frame_count - 1)); self.play_button.configure(state="normal"); self.record_button.configure(state="normal")
             self.status.configure(text=f"{os.path.basename(path)} - {fps:.2f} fps"); self.show_frame()
@@ -136,7 +139,7 @@ class SetterApp:
 
     def seek_video(self, value: str) -> None:
         if self.cap and not self.playing and not self.updating_seek:
-            self.frame_index = int(float(value)); self.last_ball = None; self.show_frame()
+            self.frame_index = int(float(value)); self.last_ball = None; self.tracker_template = None; self.tracker_template_gray = None; self.show_frame()
 
     def show_frame(self) -> None:
         if not self.cap: return
@@ -171,11 +174,16 @@ class SetterApp:
         x = int((event.x - origin_x) / self.display_scale); y = int((event.y - origin_y) / self.display_scale)
         height, width = self.raw_frame.shape[:2]
         if not (0 <= x < width and 0 <= y < height): return
-        radius = max(8, min(45, self.max_radius.get()))
+        # A large patch includes court lines and players. Keep the reference
+        # tight around the click; it is deliberately never replaced by a
+        # later frame, preventing background contamination.
+        radius = max(8, min(30, self.max_radius.get() // 3))
+        self.tracker_patch_radius = radius
         x1, y1, x2, y2 = max(0, x - radius), max(0, y - radius), min(width, x + radius + 1), min(height, y + radius + 1)
         template = self.raw_frame[y1:y2, x1:x2]
         if template.shape[0] < 8 or template.shape[1] < 8: return
-        self.tracker_template = template.copy(); self.last_ball = (x, y); self.trail.append((x, y)); self.awaiting_ball_click = False
+        self.tracker_template = template.copy(); self.tracker_template_gray = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY); self.tracker_lost_frames = 0
+        self.last_ball = (x, y); self.trail.append((x, y)); self.awaiting_ball_click = False
         self.status.configure(text=f"Ball selected at ({x}, {y}); tracking enabled")
 
     def track_selected_ball(self, frame):
@@ -186,16 +194,19 @@ class SetterApp:
         x2 = min(width, self.last_ball[0] + search_radius); y2 = min(height, self.last_ball[1] + search_radius)
         search = frame[y1:y2, x1:x2]
         if search.shape[0] < template_height or search.shape[1] < template_width: return self.last_ball
-        result = cv2.matchTemplate(search, self.tracker_template, cv2.TM_CCOEFF_NORMED)
+        # Match both colour and luminance. A colour match alone often locks
+        # onto a jersey; a grayscale match alone often locks onto court lines.
+        search_gray = cv2.cvtColor(search, cv2.COLOR_BGR2GRAY)
+        result_color = cv2.matchTemplate(search, self.tracker_template, cv2.TM_CCOEFF_NORMED)
+        result_gray = cv2.matchTemplate(search_gray, self.tracker_template_gray, cv2.TM_CCOEFF_NORMED)
+        result = (result_color * 0.55) + (result_gray * 0.45)
         _, confidence, _, location = cv2.minMaxLoc(result)
-        if confidence < 0.22: return self.last_ball
+        if confidence < 0.43:
+            self.tracker_lost_frames += 1
+            return None
+        self.tracker_lost_frames = 0
         x = x1 + location[0] + template_width // 2; y = y1 + location[1] + template_height // 2
         self.last_ball = (x, y)
-        # Refresh the template slowly to accommodate scale and lighting changes.
-        new_x1, new_y1 = max(0, x - template_width // 2), max(0, y - template_height // 2)
-        new_x2, new_y2 = min(width, new_x1 + template_width), min(height, new_y1 + template_height)
-        patch = frame[new_y1:new_y2, new_x1:new_x2]
-        if patch.shape == self.tracker_template.shape: self.tracker_template = cv2.addWeighted(self.tracker_template, 0.82, patch, 0.18, 0)
         return self.last_ball
 
     def detect_ball(self, frame):
