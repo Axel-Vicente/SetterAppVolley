@@ -1,22 +1,31 @@
 # SetterApp Volley
 
-Desktop video-analysis tool for volleyball coaches. It reviews a setter's distribution, tracks a multicolour ball after manual initialization, keeps trajectories visible, and records placement timing.
+SetterApp Volley is a desktop video-analysis tool for volleyball coaches. It is designed to review a setter's distribution, follow a multicolour ball during a rally, preserve completed trajectories, and measure each placement.
 
 ## Features
 
-- Video playback, pause, frame seeking, and CSV export.
-- Manual ball initialization: click **Select ball on video**, then click the red/yellow/white ball.
-- Local template tracking with gradual template refresh, so tracking does not assume a white ball.
-- When `opencv-contrib-python` is available, CSRT is used as the primary tracker to better handle motion, scale changes, and busy backgrounds; template matching remains the fallback.
-- Automatic fallback detector using HSV, contour geometry, Hough circles, and frame continuity.
-- Manual tracking prioritizes the ball's saturation and color pattern and rejects predominantly black regions to avoid heads and dark clothing.
-- Every marked placement freezes its trajectory, draws an endpoint circle, and starts the next trajectory in another color.
-- Each registered trail can be shown or hidden by selecting its row and pressing **Show / hide selected trail**; double-clicking a row does the same.
-- Duration is measured from ball selection to pressing **Space**, which ends the placement. The CSV includes start, end, and duration.
-- Placement targets are **Punta** (red), **Pipe** (orange), **Opuesto** (green), and **Central** (yellow).
-- Club branding is shown in the header using `LogoSanGregorioRojo.png`.
-- Delete selected placement records or delete the complete timing table.
-- Dark club-themed interface using red, black, and greys.
+- Local video playback with pause, frame seeking, and timeline navigation.
+- Manual ball initialization by clicking the ball in the video.
+- CSRT tracking through `opencv-contrib-python`, with template matching and HSV/contour detection as fallbacks.
+- Filters that prioritize the ball's colour pattern and reject predominantly black regions and implausible background matches.
+- Four placement targets with fixed trail colours:
+  - Punta — red
+  - Pipe — orange
+  - Opuesto — green
+  - Central — yellow
+- A placement starts when the ball is selected and ends when `Space` is pressed.
+- Each completed placement freezes its trail and shows a circle at its endpoint.
+- Registered trails can be shown or hidden independently from the timing table. Double-clicking a row toggles visibility.
+- `Clear trail` removes only the active, unregistered trail. Registered trails are removed only when their placement record is deleted.
+- CSV export with target, start time, end time, and duration.
+- Club logo and red/black/grey visual theme.
+
+## Requirements
+
+- Python 3.10 or newer.
+- Tkinter, normally included with the official Python installer.
+- OpenCV contrib and Pillow.
+- A video file readable by OpenCV, preferably H.264 MP4.
 
 ## Installation
 
@@ -27,33 +36,38 @@ python -m pip install -r requirements.txt
 python app.py
 ```
 
-Python 3.10+, Tkinter, OpenCV, and Pillow are required.
+On macOS/Linux, activate the environment with `source .venv/bin/activate`.
 
 ## Workflow
 
-1. Open a video and use **Play** or the timeline.
-2. Press **Select ball on video** and click the ball center. The current frame is used to create the tracking template.
-3. Select target position 1–6 and press **Space** at each placement.
-4. At every placement, the current trajectory is frozen with a colored endpoint circle; the following trajectory gets the next color.
-5. Use **Clear trail** to remove only the active, unregistered trajectory. Registered trajectories remain until their placement record is deleted; they can be hidden and shown without losing them.
-6. Select table rows and use **Delete selected record**, or use **Delete all records**.
+1. Click **Open video** and select an MP4, MOV, AVI, MKV, or M4V file.
+2. Pause on a frame where the ball is clearly visible.
+3. Press **Select ball on video** and click the centre of the ball. This starts the timing and initializes the tracker.
+4. Select **Punta**, **Pipe**, **Opuesto**, or **Central**. The number keys `1`–`4` are shortcuts.
+5. Press `Space` when the placement ends. The table records its duration and the trajectory becomes a completed coloured segment.
+6. Select a table row and use **Show / hide selected trail**, or double-click the row, to focus on specific placements.
+7. Use **Clear trail** only to discard the current unregistered segment. Use **Delete selected record** to remove a completed placement and its trajectory.
+8. Click **Export CSV** to save the analysis.
 
 ## Tracking notes
 
-Manual initialization is recommended for red/yellow/white balls. The tracker searches a local window around the previous position using template matching and updates the template slowly for lighting and scale changes. If the ball becomes fully occluded, pause, seek to a visible frame, and select it again. The `track_selected_ball()` method is the extension point for optical flow, CSRT/KCF, or YOLO when stronger occlusion handling is needed.
+Manual initialization is recommended for red/yellow/white balls and busy scenes. CSRT tracks a region rather than only the brightest point, making it more tolerant of players and moving background elements. If the ball becomes fully occluded or CSRT drifts, pause and initialize it again on a visible frame.
+
+The tracking extension points are `create_visual_tracker()`, `track_selected_ball()`, and `detect_ball()` in `app.py`. They can later be replaced by optical flow, a Kalman filter, or a detector trained on the club's camera angle.
 
 ## Troubleshooting
 
-- If the ball is lost, pause and reselect it at a visible frame.
-- If a white ceiling causes a false match, reselect the ball; tracking uses the red/yellow pattern rather than brightness alone.
-- Increase the maximum radius if the ball appears large in the source video.
-- Use **Clear trail** before starting a new analysis sequence; it does not delete registered trails.
-- If a video cannot be decoded, convert it to H.264 MP4 and try again.
+- If CSRT is unavailable, reinstall with `python -m pip install -r requirements.txt`; the project requires `opencv-contrib-python`.
+- If the ball is lost, pause and select it again while clearly visible.
+- If the initial box is too small or large, adjust the radius controls before selecting the ball.
+- If a white ceiling causes a false match, reinitialize the tracker; colour and saturation are used in addition to brightness.
+- If the video cannot be decoded, convert it to H.264 MP4.
 
 ## Project files
 
 | File | Purpose |
 | --- | --- |
-| `app.py` | User interface, playback, tracking, trajectories, and timing records |
+| `app.py` | Interface, playback, tracking, trajectories, timing, and CSV export |
 | `requirements.txt` | Python dependencies |
+| `LogoSanGregorioRojo.png` | Club logo shown in the header |
 | `README_ES.md` | Spanish documentation |
