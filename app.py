@@ -23,8 +23,12 @@ class Placement:
 
 
 class SetterApp:
-    POSITIONS = {1: "1 - Delante", 2: "2 - Delante", 3: "3 - Delante",
-                 4: "4 - Detras", 5: "5 - Detras", 6: "6 - Detras"}
+    TARGETS = {
+        1: ("Punta", (36, 36, 220)),
+        2: ("Pipe", (0, 145, 255)),
+        3: ("Opuesto", (65, 185, 75)),
+        4: ("Central", (0, 220, 255)),
+    }
 
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
@@ -47,8 +51,6 @@ class SetterApp:
         self.tracker_patch_radius = 18
         self.tracker_lost_frames = 0
         self.completed_trails: list[tuple[list[tuple[int, int]], tuple[int, int, int]]] = []
-        self.trail_color_index = 0
-        self.trail_colors = [(36, 65, 225), (30, 215, 245), (210, 170, 35), (205, 65, 190), (90, 220, 110)]
         self.display_origin = (0, 0)
         self.display_scale = 1.0
         self.display_size = (0, 0)
@@ -64,7 +66,7 @@ class SetterApp:
         self.root.report_callback_exception = self.report_callback_exception
         self.canvas.bind("<Button-1>", self.select_ball_from_canvas)
         self.root.bind("<space>", lambda _event: self.record_placement())
-        for number in range(1, 7):
+        for number in range(1, 5):
             self.root.bind(str(number), lambda _event, n=number: self.selected_position.set(n))
         self.root.protocol("WM_DELETE_WINDOW", self.close)
 
@@ -78,7 +80,13 @@ class SetterApp:
         style.configure("Danger.TButton", background="#702126", foreground="#ffffff"); style.map("Danger.TButton", background=[("active", "#a52c34")])
         style.configure("Treeview", rowheight=28, background="#202024", fieldbackground="#202024", foreground="#f4f7fb")
         style.configure("Treeview.Heading", background="#303035", foreground="#ffffff")
-        header = ttk.Frame(self.root, padding=(18, 14, 18, 8)); header.pack(fill="x")
+        header = ttk.Frame(self.root, padding=(18, 12, 18, 8)); header.pack(fill="x")
+        self.logo_photo = None
+        logo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "LogoSanGregorioRojo.png")
+        if os.path.exists(logo_path):
+            logo = Image.open(logo_path).convert("RGBA"); logo.thumbnail((58, 58), Image.Resampling.LANCZOS)
+            self.logo_photo = ImageTk.PhotoImage(logo)
+            ttk.Label(header, image=self.logo_photo).pack(side="left", padx=(0, 10))
         ttk.Label(header, text="SetterApp Volley", style="Header.TLabel").pack(side="left")
         ttk.Label(header, text=" - video analysis", font=("Segoe UI", 10)).pack(side="left", pady=5)
         ttk.Button(header, text="Open video", style="Primary.TButton", command=self.open_video).pack(side="right")
@@ -94,7 +102,11 @@ class SetterApp:
         sidebar = ttk.Frame(main, style="Panel.TFrame", padding=16); sidebar.grid(row=0, column=1, sticky="nsew"); sidebar.columnconfigure(0, weight=1)
         ttk.Label(sidebar, text="Placement target", style="Panel.TLabel", font=("Segoe UI", 12, "bold")).grid(row=0, column=0, sticky="w", pady=(0, 6))
         pos_frame = ttk.Frame(sidebar); pos_frame.grid(row=1, column=0, sticky="ew", pady=(0, 12))
-        for i in range(1, 7): ttk.Radiobutton(pos_frame, text=self.POSITIONS[i], value=i, variable=self.selected_position).grid(row=(i - 1) // 2, column=(i - 1) % 2, sticky="w", padx=(0, 12), pady=2)
+        for i, (name, rgb) in self.TARGETS.items():
+            cell = ttk.Frame(pos_frame, style="Panel.TFrame"); cell.grid(row=(i - 1) // 2, column=(i - 1) % 2, sticky="w", padx=(0, 12), pady=3)
+            swatch_rgb = (rgb[2], rgb[1], rgb[0])
+            tk.Label(cell, bg="#%02x%02x%02x" % swatch_rgb, width=2, height=1).pack(side="left", padx=(0, 5))
+            ttk.Radiobutton(cell, text=f"{i} - {name}", value=i, variable=self.selected_position).pack(side="left")
         self.record_button = ttk.Button(sidebar, text="Mark placement (Space)", style="Primary.TButton", command=self.record_placement, state="disabled"); self.record_button.grid(row=2, column=0, sticky="ew", pady=(0, 14))
         ttk.Label(sidebar, text="Tracking", style="Panel.TLabel", font=("Segoe UI", 12, "bold")).grid(row=3, column=0, sticky="w", pady=(0, 6))
         ttk.Checkbutton(sidebar, text="Detect ball", variable=self.tracking).grid(row=4, column=0, sticky="w"); ttk.Checkbutton(sidebar, text="Show trail", variable=self.show_overlay).grid(row=5, column=0, sticky="w", pady=(0, 7))
@@ -122,7 +134,7 @@ class SetterApp:
             if frame_count <= 0: raise ValueError("The video contains no readable frames.")
             if self.cap: self.cap.release()
             self.cap, self.video_path = candidate, path; self.fps, self.frame_count, self.frame_index = fps, frame_count, 0
-            self.trail.clear(); self.completed_trails.clear(); self.last_ball = None; self.tracker_template = None; self.cv_tracker = None; self.tracker_template_gray = None; self.tracker_template_hsv = None; self.tracker_color_hist = None; self.placements.clear(); self.trail_color_index = 0
+            self.trail.clear(); self.completed_trails.clear(); self.last_ball = None; self.tracker_template = None; self.cv_tracker = None; self.tracker_template_gray = None; self.tracker_template_hsv = None; self.tracker_color_hist = None; self.placements.clear()
             for item in self.table.get_children(): self.table.delete(item)
             self.seek.configure(to=max(1, frame_count - 1)); self.play_button.configure(state="normal"); self.record_button.configure(state="normal")
             self.status.configure(text=f"{os.path.basename(path)} - {fps:.2f} fps"); self.show_frame()
@@ -298,19 +310,20 @@ class SetterApp:
 
     def draw_overlay(self, frame) -> None:
         for points, color in self.completed_trails:
-            for first, second in zip(points, points[1:]): cv2.line(frame, first, second, color, 4, cv2.LINE_AA)
+            for first, second in zip(points, points[1:]): cv2.line(frame, first, second, color, 2, cv2.LINE_AA)
             if points:
                 cv2.circle(frame, points[-1], 11, (12, 12, 12), -1, cv2.LINE_AA); cv2.circle(frame, points[-1], 8, color, -1, cv2.LINE_AA)
-        current_color = self.trail_colors[self.trail_color_index % len(self.trail_colors)]
-        for first, second in zip(self.trail, self.trail[1:]): cv2.line(frame, first, second, current_color, 4, cv2.LINE_AA)
+        current_color = self.TARGETS[self.selected_position.get()][1]
+        for first, second in zip(self.trail, self.trail[1:]): cv2.line(frame, first, second, current_color, 2, cv2.LINE_AA)
         if self.trail: cv2.circle(frame, self.trail[-1], 8, current_color, 2, cv2.LINE_AA)
 
     def record_placement(self) -> None:
         if not self.cap: return
         timestamp = self.frame_index / self.fps; interval = timestamp - self.placements[-1].timestamp if self.placements else None
-        placement = Placement(len(self.placements) + 1, self.POSITIONS[self.selected_position.get()], timestamp, interval); self.placements.append(placement)
-        self.completed_trails.append((list(self.trail), self.trail_colors[self.trail_color_index % len(self.trail_colors)]))
-        self.trail.clear(); self.trail_color_index += 1
+        target_name, target_color = self.TARGETS[self.selected_position.get()]
+        placement = Placement(len(self.placements) + 1, target_name, timestamp, interval); self.placements.append(placement)
+        self.completed_trails.append((list(self.trail), target_color))
+        self.trail.clear()
         self.table.insert("", "end", values=(placement.number, placement.position, self.format_time(timestamp), "-" if interval is None else f"{interval:.3f} s")); self.status.configure(text=f"Marked {placement.position} at {self.format_time(timestamp)}")
 
     def clear_trail(self) -> None:

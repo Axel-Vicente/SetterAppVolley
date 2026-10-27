@@ -11,6 +11,8 @@ Herramienta de escritorio para analizar vídeo de voleibol. Permite revisar la d
 - Detector automático de respaldo basado en HSV, geometría de contornos, círculos de Hough y continuidad entre fotogramas.
 - El tracking manual prioriza saturación y color de la pelota, y descarta regiones predominantemente negras para evitar cabezas y ropa oscura.
 - Cada colocación marcada congela su trayectoria, dibuja un círculo en el extremo y asigna otro color a la trayectoria siguiente.
+- Los destinos son **Punta** (rojo), **Pipe** (naranja), **Opuesto** (verde) y **Central** (amarillo).
+- El encabezado muestra el logo del club desde `LogoSanGregorioRojo.png`.
 - Borrado de registros seleccionados o de toda la tabla de tiempos.
 - Interfaz oscura con los colores del club: rojo, negro y grises.
 
