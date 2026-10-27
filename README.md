@@ -1,24 +1,16 @@
 # SetterApp Volley
 
-SetterApp Volley is a desktop video-analysis tool for volleyball coaches. It is designed to review a setter's distribution, keep a visual ball trajectory on top of the video, and record the timing of each set to a target zone.
+Desktop video-analysis tool for volleyball coaches. It reviews a setter's distribution, tracks a multicolour ball after manual initialization, keeps trajectories visible, and records placement timing.
 
 ## Features
 
-- Video playback with play/pause and frame seeking.
-- Persistent ball trail that remains visible until manually cleared.
-- Multi-candidate ball detector combining HSV brightness, contour geometry, Hough circles, and frame-to-frame continuity.
-- Manual placement markers with target selection for positions 1–6.
-- Timestamp and interval calculation between consecutive placements.
-- CSV export for later analysis in Excel, LibreOffice, or a data-analysis workflow.
-- Deletion of selected placement records or the complete timing table.
-- Modern dark interface using the club palette: red, black, and greys.
-- Error dialogs for unreadable files, invalid videos, and frame-decoding failures.
-
-## Requirements
-
-- Python 3.10 or newer.
-- Tkinter, normally included with the official Python installer.
-- OpenCV and Pillow, installed from `requirements.txt`.
+- Video playback, pause, frame seeking, and CSV export.
+- Manual ball initialization: click **Select ball on video**, then click the red/yellow/white ball.
+- Local template tracking with gradual template refresh, so tracking does not assume a white ball.
+- Automatic fallback detector using HSV, contour geometry, Hough circles, and frame continuity.
+- Every marked placement freezes its trajectory, draws an endpoint circle, and starts the next trajectory in another color.
+- Delete selected placement records or delete the complete timing table.
+- Dark club-themed interface using red, black, and greys.
 
 ## Installation
 
@@ -29,39 +21,32 @@ python -m pip install -r requirements.txt
 python app.py
 ```
 
-On macOS/Linux, activate the environment with `source .venv/bin/activate`.
+Python 3.10+, Tkinter, OpenCV, and Pillow are required.
 
 ## Workflow
 
-1. Click **Open video** and select an MP4, MOV, AVI, MKV, or M4V file.
-2. Use **Play** or the timeline to reach the desired sequence.
-3. Select the target position and press **Space** at the instant of the placement. The number keys 1–6 select targets quickly.
-4. Adjust the detector radius limits when the ball is too small or too large in the source video. The detector now combines bright-object segmentation with circle detection and rejects implausible jumps between frames.
-5. Use **Clear trail** to start a new visual sequence without deleting registered timings.
-6. Select rows in the timing table and use **Delete selected record**, or use **Delete all records** to reset the table.
-7. Click **Export CSV** to save timestamps and intervals.
+1. Open a video and use **Play** or the timeline.
+2. Press **Select ball on video** and click the ball center. The current frame is used to create the tracking template.
+3. Select target position 1–6 and press **Space** at each placement.
+4. At every placement, the current trajectory is frozen with a colored endpoint circle; the following trajectory gets the next color.
+5. Use **Clear trail** to remove all trajectories without deleting timing records.
+6. Select table rows and use **Delete selected record**, or use **Delete all records**.
 
-## Detection notes
+## Tracking notes
 
-The current detector is lightweight and runs locally. It generates candidates from bright low-saturation regions and Hough circles, then scores them using circularity, radius, and distance from the previous detection. This is more tolerant of motion blur and busy backgrounds than a single threshold, but it is not a trained sports-tracking model. For production-grade tracking, the `detect_ball()` method can be replaced with a calibrated HSV profile, CSRT/KCF tracking, or a model such as YOLO trained on frames from the team's camera setup.
-
-The timing marker is manual by design: it provides a reliable coaching workflow while avoiding false automatic placement events. Automatic event classification can be added later without changing the placement table or CSV schema.
+Manual initialization is recommended for red/yellow/white balls. The tracker searches a local window around the previous position using template matching and updates the template slowly for lighting and scale changes. If the ball becomes fully occluded, pause, seek to a visible frame, and select it again. The `track_selected_ball()` method is the extension point for optical flow, CSRT/KCF, or YOLO when stronger occlusion handling is needed.
 
 ## Troubleshooting
 
-- If a video cannot be opened, verify that it plays locally and try exporting it to H.264 MP4.
-- If the application reports that no frames are readable, the file may contain an unsupported codec or a damaged index.
-- If the trail follows another bright object, increase the minimum radius, lower the maximum radius, or change the detector implementation.
-- If the application previously showed a recursive Python 3.13 traceback, update to this version: Tkinter now reports the original callback error directly, and timeline updates are guarded against callback recursion.
+- If the ball is lost, pause and reselect it at a visible frame.
+- Increase the maximum radius if the ball appears large in the source video.
+- Use **Clear trail** before starting a new analysis sequence.
+- If a video cannot be decoded, convert it to H.264 MP4 and try again.
 
-## Project structure
+## Project files
 
 | File | Purpose |
 | --- | --- |
-| `app.py` | Tkinter interface, video playback, tracking, timing, and CSV export |
+| `app.py` | User interface, playback, tracking, trajectories, and timing records |
 | `requirements.txt` | Python dependencies |
 | `README_ES.md` | Spanish documentation |
-
-## License
-
-No license has been selected yet. Add one before distributing the application outside the project.

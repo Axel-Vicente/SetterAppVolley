@@ -1,24 +1,16 @@
 # SetterApp Volley
 
-SetterApp Volley es una herramienta de escritorio para analizar vídeo de voleibol. Está pensada para revisar la distribución de un colocador, mantener visible la trayectoria de la pelota y registrar los tiempos de cada colocación hacia una zona objetivo.
+Herramienta de escritorio para analizar vídeo de voleibol. Permite revisar la distribución de un colocador, hacer tracking de una pelota multicolor después de marcarla manualmente, conservar las trayectorias y registrar los tiempos de colocación.
 
 ## Funcionalidades
 
-- Reproducción de vídeo, pausa y navegación por fotogramas.
-- Traza persistente de la pelota hasta que se borra manualmente.
-- Detector de pelota que combina brillo HSV, geometría del contorno, círculos de Hough y continuidad entre fotogramas.
-- Marcado manual de colocaciones con selección de posiciones 1–6.
-- Cálculo del instante y del intervalo respecto a la colocación anterior.
-- Exportación CSV compatible con Excel, LibreOffice y herramientas de análisis de datos.
+- Reproducción, pausa, navegación por fotogramas y exportación CSV.
+- Inicialización manual: pulsa **Select ball on video** y después haz clic sobre la pelota roja, amarilla y blanca.
+- Tracking local por plantilla con actualización gradual; no presupone que la pelota sea blanca.
+- Detector automático de respaldo basado en HSV, geometría de contornos, círculos de Hough y continuidad entre fotogramas.
+- Cada colocación marcada congela su trayectoria, dibuja un círculo en el extremo y asigna otro color a la trayectoria siguiente.
 - Borrado de registros seleccionados o de toda la tabla de tiempos.
-- Interfaz oscura y moderna con la paleta del club: rojo, negro y grises.
-- Diálogos de error para archivos ilegibles, vídeos inválidos y fallos al decodificar fotogramas.
-
-## Requisitos
-
-- Python 3.10 o superior.
-- Tkinter, incluido normalmente en el instalador oficial de Python.
-- OpenCV y Pillow, instalables desde `requirements.txt`.
+- Interfaz oscura con los colores del club: rojo, negro y grises.
 
 ## Instalación
 
@@ -29,39 +21,32 @@ python -m pip install -r requirements.txt
 python app.py
 ```
 
-En macOS/Linux, activa el entorno con `source .venv/bin/activate`.
+Se necesita Python 3.10 o superior, Tkinter, OpenCV y Pillow.
 
 ## Flujo de trabajo
 
-1. Pulsa **Open video** y selecciona un archivo MP4, MOV, AVI, MKV o M4V.
-2. Usa **Play** o la línea de tiempo para llegar a la secuencia deseada.
-3. Selecciona la posición objetivo y pulsa **Espacio** en el instante de la colocación. Las teclas 1–6 permiten cambiar de destino rápidamente.
-4. Ajusta los radios mínimo y máximo si la pelota aparece demasiado pequeña o grande. El detector combina segmentación por brillo con detección de círculos y rechaza saltos poco plausibles entre fotogramas.
-5. Pulsa **Clear trail** para comenzar una nueva secuencia visual sin borrar los tiempos ya registrados.
-6. Selecciona filas en la tabla y pulsa **Delete selected record**, o usa **Delete all records** para reiniciar la tabla.
-7. Pulsa **Export CSV** para guardar los instantes y los intervalos.
+1. Abre un vídeo y utiliza **Play** o la línea de tiempo.
+2. Pulsa **Select ball on video** y haz clic en el centro de la pelota. El fotograma actual se usa para crear la plantilla de tracking.
+3. Selecciona la posición 1–6 y pulsa **Espacio** en cada colocación.
+4. Al marcar una colocación, su trayectoria queda congelada con un círculo final de color; la siguiente utiliza otro color.
+5. Usa **Clear trail** para eliminar todas las trayectorias sin borrar los registros de tiempo.
+6. Selecciona filas de la tabla y pulsa **Delete selected record**, o usa **Delete all records**.
 
-## Notas sobre la detección
+## Notas sobre el tracking
 
-El detector actual es ligero y se ejecuta localmente. Genera candidatos a partir de regiones claras con poca saturación y círculos de Hough, y después los puntúa por circularidad, radio y distancia respecto a la detección anterior. Es más tolerante al desenfoque y a fondos complejos que un único umbral, pero no sustituye a un modelo entrenado específicamente para seguimiento deportivo. Para una solución más robusta, se puede reemplazar `detect_ball()` por un perfil HSV calibrado, un tracker CSRT/KCF o un modelo como YOLO entrenado con imágenes de la cámara del equipo.
-
-El marcado temporal es manual de forma intencionada: ofrece un flujo fiable para el entrenador y evita falsos eventos automáticos. Más adelante se puede añadir clasificación automática sin cambiar la tabla de colocaciones ni el formato CSV.
+Para pelotas rojas, amarillas y blancas se recomienda la inicialización manual. El tracker busca en una ventana local alrededor de la posición anterior mediante coincidencia de plantilla y la actualiza lentamente cuando cambian la iluminación o la escala. Si la pelota queda totalmente ocluida, pausa, busca un fotograma donde sea visible y vuelve a seleccionarla. El método `track_selected_ball()` es el punto de extensión para incorporar optical flow, CSRT/KCF o YOLO si se necesita soportar oclusiones más intensas.
 
 ## Solución de problemas
 
-- Si no se puede abrir un vídeo, comprueba que se reproduce localmente y prueba a convertirlo a MP4 H.264.
-- Si aparece que no hay fotogramas legibles, el códec puede no ser compatible o el índice del archivo estar dañado.
-- Si la traza sigue otro objeto brillante, aumenta el radio mínimo, reduce el máximo o cambia la implementación del detector.
-- Si anteriormente aparecía un traceback recursivo en Python 3.13, actualiza a esta versión: Tkinter muestra ahora el error original del callback y la actualización de la línea de tiempo está protegida contra recursión.
+- Si se pierde la pelota, pausa y vuelve a seleccionarla en un fotograma donde sea visible.
+- Aumenta el radio máximo si la pelota ocupa más tamaño en el vídeo.
+- Usa **Clear trail** antes de comenzar una secuencia de análisis nueva.
+- Si un vídeo no se puede decodificar, conviértelo a MP4 H.264 y vuelve a intentarlo.
 
-## Estructura del proyecto
+## Archivos del proyecto
 
 | Archivo | Función |
 | --- | --- |
-| `app.py` | Interfaz Tkinter, reproducción, seguimiento, tiempos y exportación CSV |
+| `app.py` | Interfaz, reproducción, tracking, trayectorias y registros de tiempo |
 | `requirements.txt` | Dependencias de Python |
 | `README.md` | Documentación en inglés |
-
-## Licencia
-
-Todavía no se ha seleccionado una licencia. Añade una antes de distribuir la aplicación fuera del proyecto.

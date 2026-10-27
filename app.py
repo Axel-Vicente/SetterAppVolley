@@ -38,6 +38,14 @@ class SetterApp:
         self.after_id: str | None = None
         self.updating_seek = False
         self.last_ball: tuple[int, int] | None = None
+        self.awaiting_ball_click = False
+        self.tracker_template = None
+        self.completed_trails: list[tuple[list[tuple[int, int]], tuple[int, int, int]]] = []
+        self.trail_color_index = 0
+        self.trail_colors = [(36, 65, 225), (30, 215, 245), (210, 170, 35), (205, 65, 190), (90, 220, 110)]
+        self.display_origin = (0, 0)
+        self.display_scale = 1.0
+        self.display_size = (0, 0)
         self.tracking = tk.BooleanVar(value=True)
         self.show_overlay = tk.BooleanVar(value=True)
         self.selected_position = tk.IntVar(value=1)
@@ -48,6 +56,7 @@ class SetterApp:
         self.photo: ImageTk.PhotoImage | None = None
         self._build_ui()
         self.root.report_callback_exception = self.report_callback_exception
+        self.canvas.bind("<Button-1>", self.select_ball_from_canvas)
         self.root.bind("<space>", lambda _event: self.record_placement())
         for number in range(1, 7):
             self.root.bind(str(number), lambda _event, n=number: self.selected_position.set(n))
@@ -83,17 +92,18 @@ class SetterApp:
         self.record_button = ttk.Button(sidebar, text="Mark placement (Space)", style="Primary.TButton", command=self.record_placement, state="disabled"); self.record_button.grid(row=2, column=0, sticky="ew", pady=(0, 14))
         ttk.Label(sidebar, text="Tracking", style="Panel.TLabel", font=("Segoe UI", 12, "bold")).grid(row=3, column=0, sticky="w", pady=(0, 6))
         ttk.Checkbutton(sidebar, text="Detect ball", variable=self.tracking).grid(row=4, column=0, sticky="w"); ttk.Checkbutton(sidebar, text="Show trail", variable=self.show_overlay).grid(row=5, column=0, sticky="w", pady=(0, 7))
-        ttk.Label(sidebar, text="Minimum / maximum radius", style="Panel.TLabel").grid(row=6, column=0, sticky="w")
+        ttk.Button(sidebar, text="Select ball on video", command=self.start_ball_selection).grid(row=6, column=0, sticky="ew", pady=(2, 7))
+        ttk.Label(sidebar, text="Minimum / maximum radius", style="Panel.TLabel").grid(row=7, column=0, sticky="w")
         radius = ttk.Frame(sidebar); radius.grid(row=7, column=0, sticky="ew")
         ttk.Spinbox(radius, from_=2, to=100, textvariable=self.min_radius, width=6).pack(side="left"); ttk.Label(radius, text=" - ").pack(side="left"); ttk.Spinbox(radius, from_=5, to=150, textvariable=self.max_radius, width=6).pack(side="left")
-        ttk.Button(sidebar, text="Clear trail", command=self.clear_trail).grid(row=8, column=0, sticky="ew", pady=(10, 4)); ttk.Button(sidebar, text="Export CSV", command=self.export_csv).grid(row=9, column=0, sticky="ew", pady=(0, 6))
-        ttk.Button(sidebar, text="Delete selected record", style="Danger.TButton", command=self.delete_selected_placement).grid(row=10, column=0, sticky="ew", pady=(0, 4))
-        ttk.Button(sidebar, text="Delete all records", style="Danger.TButton", command=self.delete_all_placements).grid(row=11, column=0, sticky="ew", pady=(0, 14))
-        ttk.Label(sidebar, text="Registered timings", style="Panel.TLabel", font=("Segoe UI", 12, "bold")).grid(row=12, column=0, sticky="w", pady=(0, 6))
-        self.table = ttk.Treeview(sidebar, columns=("n", "position", "time", "interval"), show="headings", height=12); self.table.grid(row=13, column=0, sticky="nsew"); sidebar.rowconfigure(13, weight=1)
+        radius.grid(row=8)
+        ttk.Button(sidebar, text="Clear trail", command=self.clear_trail).grid(row=9, column=0, sticky="ew", pady=(10, 4)); ttk.Button(sidebar, text="Export CSV", command=self.export_csv).grid(row=10, column=0, sticky="ew", pady=(0, 6))
+        ttk.Button(sidebar, text="Delete selected record", style="Danger.TButton", command=self.delete_selected_placement).grid(row=11, column=0, sticky="ew", pady=(0, 4))
+        ttk.Button(sidebar, text="Delete all records", style="Danger.TButton", command=self.delete_all_placements).grid(row=12, column=0, sticky="ew", pady=(0, 14))
+        ttk.Label(sidebar, text="Registered timings", style="Panel.TLabel", font=("Segoe UI", 12, "bold")).grid(row=13, column=0, sticky="w", pady=(0, 6))
+        self.table = ttk.Treeview(sidebar, columns=("n", "position", "time", "interval"), show="headings", height=12); self.table.grid(row=14, column=0, sticky="nsew"); sidebar.rowconfigure(14, weight=1)
         for column, title, width in (("n", "#", 35), ("position", "Target", 105), ("time", "Video", 75), ("interval", "Delta", 75)): self.table.heading(column, text=title); self.table.column(column, width=width, anchor="center")
-        self.table.grid_configure(row=13); sidebar.rowconfigure(13, weight=1)
-        self.status = ttk.Label(sidebar, text="Ready. Open a video.", style="Panel.TLabel", foreground="#a1a1aa", wraplength=300); self.status.grid(row=14, column=0, sticky="sw", pady=(10, 0))
+        self.status = ttk.Label(sidebar, text="Ready. Open a video.", style="Panel.TLabel", foreground="#a1a1aa", wraplength=300); self.status.grid(row=15, column=0, sticky="sw", pady=(10, 0))
 
     def open_video(self) -> None:
         path = filedialog.askopenfilename(title="Select video", filetypes=[("Videos", "*.mp4 *.mov *.avi *.mkv *.m4v"), ("All files", "*.*")])
@@ -106,7 +116,7 @@ class SetterApp:
             if frame_count <= 0: raise ValueError("The video contains no readable frames.")
             if self.cap: self.cap.release()
             self.cap, self.video_path = candidate, path; self.fps, self.frame_count, self.frame_index = fps, frame_count, 0
-            self.trail.clear(); self.last_ball = None; self.placements.clear()
+            self.trail.clear(); self.completed_trails.clear(); self.last_ball = None; self.tracker_template = None; self.placements.clear(); self.trail_color_index = 0
             for item in self.table.get_children(): self.table.delete(item)
             self.seek.configure(to=max(1, frame_count - 1)); self.play_button.configure(state="normal"); self.record_button.configure(state="normal")
             self.status.configure(text=f"{os.path.basename(path)} - {fps:.2f} fps"); self.show_frame()
@@ -132,16 +142,61 @@ class SetterApp:
         if not self.cap: return
         self.cap.set(cv2.CAP_PROP_POS_FRAMES, self.frame_index); ok, frame = self.cap.read()
         if not ok: raise RuntimeError(f"Could not decode frame {self.frame_index}.")
+        self.raw_frame = frame.copy()
         if self.tracking.get():
-            point = self.detect_ball(frame)
+            point = self.track_selected_ball(frame) if self.tracker_template is not None else self.detect_ball(frame)
             if point: self.trail.append(point)
         if self.show_overlay.get(): self.draw_overlay(frame)
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB); image = Image.fromarray(rgb); image.thumbnail((self.canvas.winfo_width() or 900, self.canvas.winfo_height() or 600), Image.Resampling.LANCZOS)
+        source_height, source_width = self.raw_frame.shape[:2]
+        self.display_size = image.size; self.display_scale = min(image.width / source_width, image.height / source_height)
+        self.display_origin = ((self.canvas.winfo_width() - image.width) // 2, (self.canvas.winfo_height() - image.height) // 2)
         self.photo = ImageTk.PhotoImage(image); self.canvas.delete("all"); self.canvas.create_image(self.canvas.winfo_width() // 2, self.canvas.winfo_height() // 2, image=self.photo, anchor="center")
         self.updating_seek = True
         try: self.seek.set(self.frame_index)
         finally: self.updating_seek = False
         now = self.frame_index / self.fps; self.time_label.configure(text=f"{self.format_time(now)} / {self.format_time(self.frame_count / self.fps)}")
+
+    def start_ball_selection(self) -> None:
+        if not self.cap:
+            self.status.configure(text="Open a video before selecting the ball")
+            return
+        self.awaiting_ball_click = True
+        self.status.configure(text="Click directly on the ball in the video")
+
+    def select_ball_from_canvas(self, event) -> None:
+        if not self.awaiting_ball_click or not self.cap or not hasattr(self, "raw_frame"):
+            return
+        origin_x, origin_y = self.display_origin
+        x = int((event.x - origin_x) / self.display_scale); y = int((event.y - origin_y) / self.display_scale)
+        height, width = self.raw_frame.shape[:2]
+        if not (0 <= x < width and 0 <= y < height): return
+        radius = max(8, min(45, self.max_radius.get()))
+        x1, y1, x2, y2 = max(0, x - radius), max(0, y - radius), min(width, x + radius + 1), min(height, y + radius + 1)
+        template = self.raw_frame[y1:y2, x1:x2]
+        if template.shape[0] < 8 or template.shape[1] < 8: return
+        self.tracker_template = template.copy(); self.last_ball = (x, y); self.trail.append((x, y)); self.awaiting_ball_click = False
+        self.status.configure(text=f"Ball selected at ({x}, {y}); tracking enabled")
+
+    def track_selected_ball(self, frame):
+        if self.last_ball is None or self.tracker_template is None: return None
+        height, width = frame.shape[:2]; template_height, template_width = self.tracker_template.shape[:2]
+        search_radius = max(45, int(max(template_width, template_height) * 3.0))
+        x1 = max(0, self.last_ball[0] - search_radius); y1 = max(0, self.last_ball[1] - search_radius)
+        x2 = min(width, self.last_ball[0] + search_radius); y2 = min(height, self.last_ball[1] + search_radius)
+        search = frame[y1:y2, x1:x2]
+        if search.shape[0] < template_height or search.shape[1] < template_width: return self.last_ball
+        result = cv2.matchTemplate(search, self.tracker_template, cv2.TM_CCOEFF_NORMED)
+        _, confidence, _, location = cv2.minMaxLoc(result)
+        if confidence < 0.22: return self.last_ball
+        x = x1 + location[0] + template_width // 2; y = y1 + location[1] + template_height // 2
+        self.last_ball = (x, y)
+        # Refresh the template slowly to accommodate scale and lighting changes.
+        new_x1, new_y1 = max(0, x - template_width // 2), max(0, y - template_height // 2)
+        new_x2, new_y2 = min(width, new_x1 + template_width), min(height, new_y1 + template_height)
+        patch = frame[new_y1:new_y2, new_x1:new_x2]
+        if patch.shape == self.tracker_template.shape: self.tracker_template = cv2.addWeighted(self.tracker_template, 0.82, patch, 0.18, 0)
+        return self.last_ball
 
     def detect_ball(self, frame):
         """Return the most plausible ball candidate using appearance and continuity."""
@@ -185,13 +240,20 @@ class SetterApp:
         return self.last_ball
 
     def draw_overlay(self, frame) -> None:
-        for first, second in zip(self.trail, self.trail[1:]): cv2.line(frame, first, second, (71, 220, 196), 3, cv2.LINE_AA)
-        if self.trail: cv2.circle(frame, self.trail[-1], 8, (30, 240, 255), 2, cv2.LINE_AA)
+        for points, color in self.completed_trails:
+            for first, second in zip(points, points[1:]): cv2.line(frame, first, second, color, 4, cv2.LINE_AA)
+            if points:
+                cv2.circle(frame, points[-1], 11, (12, 12, 12), -1, cv2.LINE_AA); cv2.circle(frame, points[-1], 8, color, -1, cv2.LINE_AA)
+        current_color = self.trail_colors[self.trail_color_index % len(self.trail_colors)]
+        for first, second in zip(self.trail, self.trail[1:]): cv2.line(frame, first, second, current_color, 4, cv2.LINE_AA)
+        if self.trail: cv2.circle(frame, self.trail[-1], 8, current_color, 2, cv2.LINE_AA)
 
     def record_placement(self) -> None:
         if not self.cap: return
         timestamp = self.frame_index / self.fps; interval = timestamp - self.placements[-1].timestamp if self.placements else None
         placement = Placement(len(self.placements) + 1, self.POSITIONS[self.selected_position.get()], timestamp, interval); self.placements.append(placement)
+        self.completed_trails.append((list(self.trail), self.trail_colors[self.trail_color_index % len(self.trail_colors)]))
+        self.trail.clear(); self.trail_color_index += 1
         self.table.insert("", "end", values=(placement.number, placement.position, self.format_time(timestamp), "-" if interval is None else f"{interval:.3f} s")); self.status.configure(text=f"Marked {placement.position} at {self.format_time(timestamp)}")
 
     def clear_trail(self) -> None:
@@ -205,13 +267,14 @@ class SetterApp:
         indexes = sorted((int(self.table.item(item, "values")[0]) - 1 for item in selected), reverse=True)
         for index in indexes:
             if 0 <= index < len(self.placements): del self.placements[index]
+            if 0 <= index < len(self.completed_trails): del self.completed_trails[index]
         self.refresh_placements_table()
         self.status.configure(text=f"Deleted {len(indexes)} record(s)")
 
     def delete_all_placements(self) -> None:
         if not self.placements: return
         if not messagebox.askyesno("Delete records", "Delete all registered placements?"): return
-        self.placements.clear(); self.refresh_placements_table(); self.status.configure(text="All placement records deleted")
+        self.placements.clear(); self.completed_trails.clear(); self.trail.clear(); self.refresh_placements_table(); self.status.configure(text="All placement records deleted")
 
     def refresh_placements_table(self) -> None:
         for item in self.table.get_children(): self.table.delete(item)
