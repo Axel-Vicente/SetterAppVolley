@@ -40,6 +40,7 @@ class SetterApp:
         self.last_ball: tuple[int, int] | None = None
         self.awaiting_ball_click = False
         self.tracker_template = None
+        self.cv_tracker = None
         self.tracker_template_gray = None
         self.tracker_template_hsv = None
         self.tracker_color_hist = None
@@ -121,7 +122,7 @@ class SetterApp:
             if frame_count <= 0: raise ValueError("The video contains no readable frames.")
             if self.cap: self.cap.release()
             self.cap, self.video_path = candidate, path; self.fps, self.frame_count, self.frame_index = fps, frame_count, 0
-            self.trail.clear(); self.completed_trails.clear(); self.last_ball = None; self.tracker_template = None; self.tracker_template_gray = None; self.tracker_template_hsv = None; self.tracker_color_hist = None; self.placements.clear(); self.trail_color_index = 0
+            self.trail.clear(); self.completed_trails.clear(); self.last_ball = None; self.tracker_template = None; self.cv_tracker = None; self.tracker_template_gray = None; self.tracker_template_hsv = None; self.tracker_color_hist = None; self.placements.clear(); self.trail_color_index = 0
             for item in self.table.get_children(): self.table.delete(item)
             self.seek.configure(to=max(1, frame_count - 1)); self.play_button.configure(state="normal"); self.record_button.configure(state="normal")
             self.status.configure(text=f"{os.path.basename(path)} - {fps:.2f} fps"); self.show_frame()
@@ -141,7 +142,7 @@ class SetterApp:
 
     def seek_video(self, value: str) -> None:
         if self.cap and not self.playing and not self.updating_seek:
-            self.frame_index = int(float(value)); self.last_ball = None; self.tracker_template = None; self.tracker_template_gray = None; self.tracker_template_hsv = None; self.tracker_color_hist = None; self.show_frame()
+            self.frame_index = int(float(value)); self.last_ball = None; self.tracker_template = None; self.cv_tracker = None; self.tracker_template_gray = None; self.tracker_template_hsv = None; self.tracker_color_hist = None; self.show_frame()
 
     def show_frame(self) -> None:
         if not self.cap: return
@@ -179,7 +180,7 @@ class SetterApp:
         # A large patch includes court lines and players. Keep the reference
         # tight around the click; it is deliberately never replaced by a
         # later frame, preventing background contamination.
-        radius = max(8, min(30, self.max_radius.get() // 3))
+        radius = max(12, min(30, self.max_radius.get() * 2))
         self.tracker_patch_radius = radius
         x1, y1, x2, y2 = max(0, x - radius), max(0, y - radius), min(width, x + radius + 1), min(height, y + radius + 1)
         template = self.raw_frame[y1:y2, x1:x2]
@@ -189,10 +190,27 @@ class SetterApp:
         self.tracker_color_hist = self.build_color_histogram(self.tracker_template_hsv)
         self.tracker_lost_frames = 0
         self.last_ball = (x, y); self.trail.append((x, y)); self.awaiting_ball_click = False
-        self.status.configure(text=f"Ball selected at ({x}, {y}); tracking enabled")
+        self.cv_tracker = self.create_visual_tracker()
+        if self.cv_tracker is not None:
+            bbox = (x1, y1, x2 - x1, y2 - y1)
+            try: self.cv_tracker.init(self.raw_frame, bbox)
+            except cv2.error: self.cv_tracker = None
+        tracker_name = "CSRT" if self.cv_tracker is not None else "template"
+        self.status.configure(text=f"Ball selected at ({x}, {y}); {tracker_name} tracking enabled")
 
     def track_selected_ball(self, frame):
         if self.last_ball is None or self.tracker_template is None: return None
+        if self.cv_tracker is not None:
+            ok, box = self.cv_tracker.update(frame)
+            if not ok: return None
+            bx, by, bw, bh = [int(value) for value in box]
+            if bw < 6 or bh < 6 or bx < 0 or by < 0 or bx + bw > frame.shape[1] or by + bh > frame.shape[0]: return None
+            candidate = cv2.cvtColor(frame[by:by + bh, bx:bx + bw], cv2.COLOR_BGR2HSV)
+            black_fraction = float((candidate[:, :, 2] < 38).mean())
+            color_score = cv2.compareHist(self.tracker_color_hist, self.build_color_histogram(candidate), cv2.HISTCMP_CORREL)
+            if black_fraction > 0.42 or color_score < -0.05: return None
+            self.last_ball = (bx + bw // 2, by + bh // 2)
+            return self.last_ball
         height, width = frame.shape[:2]; template_height, template_width = self.tracker_template.shape[:2]
         search_radius = max(45, int(max(template_width, template_height) * 3.0))
         x1 = max(0, self.last_ball[0] - search_radius); y1 = max(0, self.last_ball[1] - search_radius)
@@ -224,6 +242,12 @@ class SetterApp:
             return None
         self.last_ball = (x, y)
         return self.last_ball
+
+    @staticmethod
+    def create_visual_tracker():
+        factory = getattr(cv2, "TrackerCSRT_create", None)
+        if factory is None and hasattr(cv2, "legacy"): factory = getattr(cv2.legacy, "TrackerCSRT_create", None)
+        return factory() if factory is not None else None
 
     @staticmethod
     def build_color_histogram(hsv_frame):

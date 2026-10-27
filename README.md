@@ -7,6 +7,7 @@ Desktop video-analysis tool for volleyball coaches. It reviews a setter's distri
 - Video playback, pause, frame seeking, and CSV export.
 - Manual ball initialization: click **Select ball on video**, then click the red/yellow/white ball.
 - Local template tracking with gradual template refresh, so tracking does not assume a white ball.
+- When `opencv-contrib-python` is available, CSRT is used as the primary tracker to better handle motion, scale changes, and busy backgrounds; template matching remains the fallback.
 - Automatic fallback detector using HSV, contour geometry, Hough circles, and frame continuity.
 - Manual tracking prioritizes the ball's saturation and color pattern and rejects predominantly black regions to avoid heads and dark clothing.
 - Every marked placement freezes its trajectory, draws an endpoint circle, and starts the next trajectory in another color.

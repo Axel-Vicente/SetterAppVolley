@@ -7,6 +7,7 @@ Herramienta de escritorio para analizar vídeo de voleibol. Permite revisar la d
 - Reproducción, pausa, navegación por fotogramas y exportación CSV.
 - Inicialización manual: pulsa **Select ball on video** y después haz clic sobre la pelota roja, amarilla y blanca.
 - Tracking local por plantilla con actualización gradual; no presupone que la pelota sea blanca.
+- Cuando está disponible `opencv-contrib-python`, utiliza CSRT como tracker principal para tolerar mejor movimiento, cambios de escala y estímulos del fondo; la plantilla queda como fallback.
 - Detector automático de respaldo basado en HSV, geometría de contornos, círculos de Hough y continuidad entre fotogramas.
 - El tracking manual prioriza saturación y color de la pelota, y descarta regiones predominantemente negras para evitar cabezas y ropa oscura.
 - Cada colocación marcada congela su trayectoria, dibuja un círculo en el extremo y asigna otro color a la trayectoria siguiente.
