@@ -6,10 +6,12 @@ SetterApp Volley is a desktop video-analysis tool for volleyball coaches. It is 
 
 - Video playback with play/pause and frame seeking.
 - Persistent ball trail that remains visible until manually cleared.
-- Configurable first-pass ball detector based on HSV brightness, object radius, and contour circularity.
+- Multi-candidate ball detector combining HSV brightness, contour geometry, Hough circles, and frame-to-frame continuity.
 - Manual placement markers with target selection for positions 1–6.
 - Timestamp and interval calculation between consecutive placements.
 - CSV export for later analysis in Excel, LibreOffice, or a data-analysis workflow.
+- Deletion of selected placement records or the complete timing table.
+- Modern dark interface using the club palette: red, black, and greys.
 - Error dialogs for unreadable files, invalid videos, and frame-decoding failures.
 
 ## Requirements
@@ -34,13 +36,14 @@ On macOS/Linux, activate the environment with `source .venv/bin/activate`.
 1. Click **Open video** and select an MP4, MOV, AVI, MKV, or M4V file.
 2. Use **Play** or the timeline to reach the desired sequence.
 3. Select the target position and press **Space** at the instant of the placement. The number keys 1–6 select targets quickly.
-4. Adjust the detector radius limits when the ball is too small or too large in the source video.
+4. Adjust the detector radius limits when the ball is too small or too large in the source video. The detector now combines bright-object segmentation with circle detection and rejects implausible jumps between frames.
 5. Use **Clear trail** to start a new visual sequence without deleting registered timings.
-6. Click **Export CSV** to save timestamps and intervals.
+6. Select rows in the timing table and use **Delete selected record**, or use **Delete all records** to reset the table.
+7. Click **Export CSV** to save timestamps and intervals.
 
 ## Detection notes
 
-The current detector is intentionally lightweight and runs locally. It identifies bright, compact, approximately circular regions. This works as a practical baseline when the ball contrasts with the background, but it is not a trained sports-tracking model. For production-grade tracking, the `detect_ball()` method can be replaced with a calibrated HSV profile, CSRT/KCF tracking, or a model such as YOLO trained on frames from the team's camera setup.
+The current detector is lightweight and runs locally. It generates candidates from bright low-saturation regions and Hough circles, then scores them using circularity, radius, and distance from the previous detection. This is more tolerant of motion blur and busy backgrounds than a single threshold, but it is not a trained sports-tracking model. For production-grade tracking, the `detect_ball()` method can be replaced with a calibrated HSV profile, CSRT/KCF tracking, or a model such as YOLO trained on frames from the team's camera setup.
 
 The timing marker is manual by design: it provides a reliable coaching workflow while avoiding false automatic placement events. Automatic event classification can be added later without changing the placement table or CSV schema.
 
