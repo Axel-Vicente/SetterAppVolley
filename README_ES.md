@@ -8,6 +8,7 @@ Herramienta de escritorio para analizar vídeo de voleibol. Permite revisar la d
 - Inicialización manual: pulsa **Select ball on video** y después haz clic sobre la pelota roja, amarilla y blanca.
 - Tracking local por plantilla con actualización gradual; no presupone que la pelota sea blanca.
 - Detector automático de respaldo basado en HSV, geometría de contornos, círculos de Hough y continuidad entre fotogramas.
+- El tracking manual prioriza saturación y color de la pelota, y descarta regiones predominantemente negras para evitar cabezas y ropa oscura.
 - Cada colocación marcada congela su trayectoria, dibuja un círculo en el extremo y asigna otro color a la trayectoria siguiente.
 - Borrado de registros seleccionados o de toda la tabla de tiempos.
 - Interfaz oscura con los colores del club: rojo, negro y grises.
@@ -39,6 +40,7 @@ Para pelotas rojas, amarillas y blancas se recomienda la inicialización manual.
 ## Solución de problemas
 
 - Si se pierde la pelota, pausa y vuelve a seleccionarla en un fotograma donde sea visible.
+- Si el techo blanco genera un falso positivo, vuelve a seleccionar la pelota: el tracker usa el patrón rojo/amarillo y no solo el brillo.
 - Aumenta el radio máximo si la pelota ocupa más tamaño en el vídeo.
 - Usa **Clear trail** antes de comenzar una secuencia de análisis nueva.
 - Si un vídeo no se puede decodificar, conviértelo a MP4 H.264 y vuelve a intentarlo.

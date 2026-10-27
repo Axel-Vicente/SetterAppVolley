@@ -41,6 +41,8 @@ class SetterApp:
         self.awaiting_ball_click = False
         self.tracker_template = None
         self.tracker_template_gray = None
+        self.tracker_template_hsv = None
+        self.tracker_color_hist = None
         self.tracker_patch_radius = 18
         self.tracker_lost_frames = 0
         self.completed_trails: list[tuple[list[tuple[int, int]], tuple[int, int, int]]] = []
@@ -119,7 +121,7 @@ class SetterApp:
             if frame_count <= 0: raise ValueError("The video contains no readable frames.")
             if self.cap: self.cap.release()
             self.cap, self.video_path = candidate, path; self.fps, self.frame_count, self.frame_index = fps, frame_count, 0
-            self.trail.clear(); self.completed_trails.clear(); self.last_ball = None; self.tracker_template = None; self.tracker_template_gray = None; self.placements.clear(); self.trail_color_index = 0
+            self.trail.clear(); self.completed_trails.clear(); self.last_ball = None; self.tracker_template = None; self.tracker_template_gray = None; self.tracker_template_hsv = None; self.tracker_color_hist = None; self.placements.clear(); self.trail_color_index = 0
             for item in self.table.get_children(): self.table.delete(item)
             self.seek.configure(to=max(1, frame_count - 1)); self.play_button.configure(state="normal"); self.record_button.configure(state="normal")
             self.status.configure(text=f"{os.path.basename(path)} - {fps:.2f} fps"); self.show_frame()
@@ -139,7 +141,7 @@ class SetterApp:
 
     def seek_video(self, value: str) -> None:
         if self.cap and not self.playing and not self.updating_seek:
-            self.frame_index = int(float(value)); self.last_ball = None; self.tracker_template = None; self.tracker_template_gray = None; self.show_frame()
+            self.frame_index = int(float(value)); self.last_ball = None; self.tracker_template = None; self.tracker_template_gray = None; self.tracker_template_hsv = None; self.tracker_color_hist = None; self.show_frame()
 
     def show_frame(self) -> None:
         if not self.cap: return
@@ -182,7 +184,10 @@ class SetterApp:
         x1, y1, x2, y2 = max(0, x - radius), max(0, y - radius), min(width, x + radius + 1), min(height, y + radius + 1)
         template = self.raw_frame[y1:y2, x1:x2]
         if template.shape[0] < 8 or template.shape[1] < 8: return
-        self.tracker_template = template.copy(); self.tracker_template_gray = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY); self.tracker_lost_frames = 0
+        self.tracker_template = template.copy(); self.tracker_template_gray = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
+        self.tracker_template_hsv = cv2.cvtColor(template, cv2.COLOR_BGR2HSV)
+        self.tracker_color_hist = self.build_color_histogram(self.tracker_template_hsv)
+        self.tracker_lost_frames = 0
         self.last_ball = (x, y); self.trail.append((x, y)); self.awaiting_ball_click = False
         self.status.configure(text=f"Ball selected at ({x}, {y}); tracking enabled")
 
@@ -194,20 +199,37 @@ class SetterApp:
         x2 = min(width, self.last_ball[0] + search_radius); y2 = min(height, self.last_ball[1] + search_radius)
         search = frame[y1:y2, x1:x2]
         if search.shape[0] < template_height or search.shape[1] < template_width: return self.last_ball
-        # Match both colour and luminance. A colour match alone often locks
-        # onto a jersey; a grayscale match alone often locks onto court lines.
+        # Match colour, saturation, and luminance. The saturation channel is
+        # important here: a white ceiling can match brightness, but not the
+        # red/yellow colour pattern of the ball.
         search_gray = cv2.cvtColor(search, cv2.COLOR_BGR2GRAY)
+        search_hsv = cv2.cvtColor(search, cv2.COLOR_BGR2HSV)
         result_color = cv2.matchTemplate(search, self.tracker_template, cv2.TM_CCOEFF_NORMED)
         result_gray = cv2.matchTemplate(search_gray, self.tracker_template_gray, cv2.TM_CCOEFF_NORMED)
-        result = (result_color * 0.55) + (result_gray * 0.45)
+        result_saturation = cv2.matchTemplate(search_hsv[:, :, 1], self.tracker_template_hsv[:, :, 1], cv2.TM_CCOEFF_NORMED)
+        result = (result_color * 0.35) + (result_gray * 0.20) + (result_saturation * 0.45)
         _, confidence, _, location = cv2.minMaxLoc(result)
-        if confidence < 0.43:
+        if confidence < 0.48:
             self.tracker_lost_frames += 1
             return None
         self.tracker_lost_frames = 0
         x = x1 + location[0] + template_width // 2; y = y1 + location[1] + template_height // 2
+        candidate = search_hsv[location[1]:location[1] + template_height, location[0]:location[0] + template_width]
+        color_score = cv2.compareHist(self.tracker_color_hist, self.build_color_histogram(candidate), cv2.HISTCMP_CORREL)
+        black_fraction = float((candidate[:, :, 2] < 38).mean())
+        # The selected ball is not black. Reject heads, dark clothing, and
+        # other dark regions even when their texture matches the template.
+        if color_score < 0.08 or black_fraction > 0.28:
+            self.tracker_lost_frames += 1
+            return None
         self.last_ball = (x, y)
         return self.last_ball
+
+    @staticmethod
+    def build_color_histogram(hsv_frame):
+        non_black = cv2.inRange(hsv_frame, (0, 20, 38), (180, 255, 255))
+        histogram = cv2.calcHist([hsv_frame], [0, 1], non_black, [18, 8], [0, 180, 0, 256])
+        return cv2.normalize(histogram, histogram).astype("float32")
 
     def detect_ball(self, frame):
         """Return the most plausible ball candidate using appearance and continuity."""
