@@ -35,7 +35,7 @@ Se necesita Python 3.10 o superior, Tkinter, OpenCV y Pillow.
 2. Pulsa **Select ball on video** y haz clic en el centro de la pelota. El fotograma actual se usa para crear la plantilla de tracking.
 3. Selecciona la posición 1–6 y pulsa **Espacio** en cada colocación.
 4. Al marcar una colocación, su trayectoria queda congelada con un círculo final de color; la siguiente utiliza otro color.
-5. Usa **Clear trail** para eliminar todas las trayectorias sin borrar los registros de tiempo.
+5. Usa **Clear trail** para eliminar solo la trayectoria activa no registrada. Las trayectorias guardadas permanecen hasta borrar su registro y se pueden ocultar y mostrar sin perderlas.
 6. Selecciona filas de la tabla y pulsa **Delete selected record**, o usa **Delete all records**.
 
 ## Notas sobre el tracking
@@ -47,7 +47,7 @@ Para pelotas rojas, amarillas y blancas se recomienda la inicialización manual.
 - Si se pierde la pelota, pausa y vuelve a seleccionarla en un fotograma donde sea visible.
 - Si el techo blanco genera un falso positivo, vuelve a seleccionar la pelota: el tracker usa el patrón rojo/amarillo y no solo el brillo.
 - Aumenta el radio máximo si la pelota ocupa más tamaño en el vídeo.
-- Usa **Clear trail** antes de comenzar una secuencia de análisis nueva.
+- Usa **Clear trail** antes de comenzar una secuencia de análisis nueva; no borra las trayectorias registradas.
 - Si un vídeo no se puede decodificar, conviértelo a MP4 H.264 y vuelve a intentarlo.
 
 ## Archivos del proyecto

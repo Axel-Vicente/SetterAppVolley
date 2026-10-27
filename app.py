@@ -342,7 +342,10 @@ class SetterApp:
         self.table.insert("", "end", values=(placement.number, placement.position, f"{duration:.3f} s", "Shown")); self.status.configure(text=f"Marked {placement.position}: {duration:.3f} s")
 
     def clear_trail(self) -> None:
-        self.trail.clear(); self.completed_trails.clear(); self.last_ball = None; self.show_frame()
+        # Only discard the in-progress trajectory. Completed trajectories are
+        # owned by their placement record and can only be removed by deleting
+        # that record; visibility is handled independently by the table.
+        self.trail.clear(); self.last_ball = None; self.status.configure(text="Active trail cleared; registered trails kept"); self.show_frame()
 
     def delete_selected_placement(self) -> None:
         selected = self.table.selection()

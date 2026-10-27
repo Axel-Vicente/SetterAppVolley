@@ -35,7 +35,7 @@ Python 3.10+, Tkinter, OpenCV, and Pillow are required.
 2. Press **Select ball on video** and click the ball center. The current frame is used to create the tracking template.
 3. Select target position 1–6 and press **Space** at each placement.
 4. At every placement, the current trajectory is frozen with a colored endpoint circle; the following trajectory gets the next color.
-5. Use **Clear trail** to remove all trajectories without deleting timing records.
+5. Use **Clear trail** to remove only the active, unregistered trajectory. Registered trajectories remain until their placement record is deleted; they can be hidden and shown without losing them.
 6. Select table rows and use **Delete selected record**, or use **Delete all records**.
 
 ## Tracking notes
@@ -47,7 +47,7 @@ Manual initialization is recommended for red/yellow/white balls. The tracker sea
 - If the ball is lost, pause and reselect it at a visible frame.
 - If a white ceiling causes a false match, reselect the ball; tracking uses the red/yellow pattern rather than brightness alone.
 - Increase the maximum radius if the ball appears large in the source video.
-- Use **Clear trail** before starting a new analysis sequence.
+- Use **Clear trail** before starting a new analysis sequence; it does not delete registered trails.
 - If a video cannot be decoded, convert it to H.264 MP4 and try again.
 
 ## Project files
