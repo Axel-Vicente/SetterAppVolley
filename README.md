@@ -11,6 +11,8 @@ Desktop video-analysis tool for volleyball coaches. It reviews a setter's distri
 - Automatic fallback detector using HSV, contour geometry, Hough circles, and frame continuity.
 - Manual tracking prioritizes the ball's saturation and color pattern and rejects predominantly black regions to avoid heads and dark clothing.
 - Every marked placement freezes its trajectory, draws an endpoint circle, and starts the next trajectory in another color.
+- Each registered trail can be shown or hidden by selecting its row and pressing **Show / hide selected trail**; double-clicking a row does the same.
+- Duration is measured from ball selection to pressing **Space**, which ends the placement. The CSV includes start, end, and duration.
 - Placement targets are **Punta** (red), **Pipe** (orange), **Opuesto** (green), and **Central** (yellow).
 - Club branding is shown in the header using `LogoSanGregorioRojo.png`.
 - Delete selected placement records or delete the complete timing table.

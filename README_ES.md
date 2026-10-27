@@ -16,6 +16,8 @@ Herramienta de escritorio para analizar vídeo de voleibol. Permite revisar la d
 - Borrado de registros seleccionados o de toda la tabla de tiempos.
 - Interfaz oscura con los colores del club: rojo, negro y grises.
 
+La trayectoria de cada registro se puede mostrar u ocultar seleccionando la fila y pulsando **Show / hide selected trail**; el doble clic sobre una fila hace lo mismo. La duración se mide desde la selección de la pelota hasta la pulsación de **Espacio**, que finaliza la colocación. El CSV incluye inicio, fin y duración.
+
 ## Instalación
 
 ```powershell
