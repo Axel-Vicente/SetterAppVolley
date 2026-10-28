@@ -15,12 +15,14 @@ SetterApp Volley is a desktop video-analysis tool for volleyball coaches. It is 
   - Central — yellow
 - A placement starts when the ball is selected and ends when `Space` is pressed.
 - Each completed placement freezes its trail and shows a circle at its endpoint.
+- Completed trajectories are rendered as a fitted parabola through the captured path, preserving the exact real start and end points.
 - Registered trails can be shown or hidden independently from the timing table. Double-clicking a row toggles visibility.
 - `Clear trail` removes only the active, unregistered trail. Registered trails are removed only when their placement record is deleted.
 - CSV export with target, start time, end time, and duration.
 - Export of an annotated video with visible trails and endpoint circles. The generated video does not include audio.
 - Export of a JSON trail template containing points, frame indices, colours, visibility, and timings for reuse.
 - Club logo and red/black/grey visual theme.
+- Footer identifying the developer: Axel Vicente Magaña.
 
 ## Requirements
 

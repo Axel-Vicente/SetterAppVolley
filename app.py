@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from tkinter import filedialog, messagebox, ttk
 
 import cv2
+import numpy as np
 from PIL import Image, ImageTk
 
 
@@ -93,7 +94,7 @@ class SetterApp:
         style = ttk.Style(self.root); style.theme_use("clam")
         style.configure("TFrame", background="#0b0b0d"); style.configure("Panel.TFrame", background="#151518")
         style.configure("TLabel", background="#0b0b0d", foreground="#eeeeef"); style.configure("Panel.TLabel", background="#151518", foreground="#eeeeef")
-        style.configure("Header.TLabel", font=("Segoe UI", 19, "bold"), foreground="#e3262e"); style.configure("TButton", padding=8, background="#29292d", foreground="#f4f4f5")
+        style.configure("Header.TLabel", font=("Segoe UI", 19, "bold"), foreground="#e3262e"); style.configure("Footer.TLabel", font=("Segoe UI", 9), foreground="#77777d", background="#0b0b0d"); style.configure("TButton", padding=8, background="#29292d", foreground="#f4f4f5")
         style.map("TButton", background=[("active", "#3a3a40")]); style.configure("Primary.TButton", background="#d71920", foreground="#ffffff", font=("Segoe UI", 10, "bold")); style.map("Primary.TButton", background=[("active", "#ef343b")])
         style.configure("Danger.TButton", background="#702126", foreground="#ffffff"); style.map("Danger.TButton", background=[("active", "#a52c34")])
         style.configure("Treeview", rowheight=28, background="#202024", fieldbackground="#202024", foreground="#f4f7fb")
@@ -147,6 +148,8 @@ class SetterApp:
         self.table.bind("<Double-1>", lambda _event: self.toggle_selected_trails())
         ttk.Button(sidebar, text="Show / hide selected trail", command=self.toggle_selected_trails).grid(row=16, column=0, sticky="ew", pady=(8, 4))
         self.status = ttk.Label(sidebar, text="Ready. Open a video.", style="Panel.TLabel", foreground="#a1a1aa", wraplength=300); self.status.grid(row=17, column=0, sticky="sw", pady=(10, 0))
+        footer = ttk.Frame(self.root); footer.pack(fill="x", side="bottom", padx=18, pady=(0, 8))
+        ttk.Label(footer, text="Desarrollador: Axel Vicente Magaña", style="Footer.TLabel").pack(side="right")
 
     def open_video(self) -> None:
         path = filedialog.askopenfilename(title="Select video", filetypes=[("Videos", "*.mp4 *.mov *.avi *.mkv *.m4v"), ("All files", "*.*")])
@@ -387,7 +390,7 @@ class SetterApp:
     def draw_overlay(self, frame) -> None:
         for segment in self.completed_trails:
             if not segment.visible: continue
-            self.draw_smooth_polyline(frame, segment.points, segment.color, 3)
+            self.draw_parabolic_polyline(frame, segment.points, segment.color, 3)
             if segment.points:
                 cv2.circle(frame, segment.points[-1], 11, (12, 12, 12), -1, cv2.LINE_AA); cv2.circle(frame, segment.points[-1], 8, segment.color, -1, cv2.LINE_AA)
         current_color = self.TARGETS[self.selected_position.get()][1]
@@ -411,6 +414,36 @@ class SetterApp:
     def draw_smooth_polyline(self, frame, points: list[tuple[int, int]], color, width: int) -> None:
         smooth = self.smooth_points(points)
         for first, second in zip(smooth, smooth[1:]): cv2.line(frame, first, second, color, width, cv2.LINE_AA)
+
+    @staticmethod
+    def parabolic_points(points: list[tuple[int, int]], samples: int = 48) -> list[tuple[int, int]]:
+        """Fit y(x) to a parabola while keeping the real start/end points."""
+        if len(points) < 4: return points
+        start, end = points[0], points[-1]
+        dx = end[0] - start[0]
+        if abs(dx) < 8: return SetterApp.smooth_points(points)
+        x_values = np.asarray([point[0] for point in points], dtype=float)
+        y_values = np.asarray([point[1] for point in points], dtype=float)
+        baseline_slope = (end[1] - start[1]) / dx
+        baseline = start[1] + baseline_slope * (x_values - start[0])
+        basis = (x_values - start[0]) * (x_values - end[0])
+        valid = np.isfinite(x_values) & np.isfinite(y_values)
+        if valid.sum() < 4 or float(np.sum(basis[valid] ** 2)) < 1e-6: return SetterApp.smooth_points(points)
+        curvature = float(np.sum(basis[valid] * (y_values[valid] - baseline[valid])) / np.sum(basis[valid] ** 2))
+        residuals = np.abs(y_values - (baseline + curvature * basis))
+        threshold = max(8.0, float(np.median(residuals)) * 2.5)
+        inliers = valid & (residuals <= threshold)
+        if inliers.sum() >= 4:
+            curvature = float(np.sum(basis[inliers] * (y_values[inliers] - baseline[inliers])) / np.sum(basis[inliers] ** 2))
+        x_samples = np.linspace(start[0], end[0], samples)
+        y_samples = start[1] + baseline_slope * (x_samples - start[0]) + curvature * (x_samples - start[0]) * (x_samples - end[0])
+        result = [(round(float(x)), round(float(y))) for x, y in zip(x_samples, y_samples)]
+        result[0], result[-1] = start, end
+        return result
+
+    def draw_parabolic_polyline(self, frame, points: list[tuple[int, int]], color, width: int) -> None:
+        parabola = self.parabolic_points(points)
+        for first, second in zip(parabola, parabola[1:]): cv2.line(frame, first, second, color, width, cv2.LINE_AA)
 
     def record_placement(self) -> None:
         if not self.cap: return
@@ -507,7 +540,7 @@ class SetterApp:
         for segment in self.completed_trails:
             if not segment.visible: continue
             points = [point for point, point_frame in zip(segment.points, segment.frame_indices) if point_frame <= frame_index]
-            if len(points) > 1: self.draw_smooth_polyline(frame, points, segment.color, 3)
+            if len(points) > 1: self.draw_parabolic_polyline(frame, points, segment.color, 3)
             if points and segment.frame_indices and frame_index >= segment.frame_indices[-1]:
                 cv2.circle(frame, points[-1], 11, (12, 12, 12), -1, cv2.LINE_AA); cv2.circle(frame, points[-1], 8, segment.color, -1, cv2.LINE_AA)
 

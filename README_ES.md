@@ -15,12 +15,14 @@ SetterApp Volley es una herramienta de escritorio para entrenadores de voleibol.
   - Central — amarillo
 - La colocación comienza al seleccionar la pelota y termina al pulsar `Espacio`.
 - Cada colocación terminada congela su trayectoria y muestra un círculo en el extremo.
+- Las trayectorias terminadas se representan como una parábola ajustada a los puntos capturados, conservando exactamente el inicio y el final reales.
 - Las trayectorias registradas se pueden mostrar u ocultar de forma independiente desde la tabla. El doble clic sobre una fila alterna su visibilidad.
 - **Clear trail** solo elimina la trayectoria activa no registrada. Las trayectorias guardadas solo se eliminan al borrar su registro.
 - Exportación CSV con destino, inicio, fin y duración.
 - Exportación de un vídeo anotado con las trayectorias visibles y círculos finales. El vídeo se genera sin audio.
 - Exportación de una plantilla JSON con puntos, fotogramas, colores, visibilidad y tiempos para reutilizar el análisis.
 - Logo del club e interfaz con tema rojo, negro y grises.
+- Footer con la identificación del desarrollador: Axel Vicente Magaña.
 
 ## Requisitos
 
