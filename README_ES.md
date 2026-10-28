@@ -5,7 +5,7 @@ SetterApp Volley es una herramienta de escritorio para entrenadores de voleibol.
 ## Funcionalidades
 
 - Reproducción local de vídeo, pausa, navegación por fotogramas y línea de tiempo.
-- Inicialización manual de la pelota dibujando un círculo sobre ella en el vídeo; ese círculo define su diámetro de seguimiento.
+- Inicialización manual de la pelota haciendo clic en su centro; el diámetro se calibra aparte con **Draw radius** en los controles de radio.
 - Tracking CSRT mediante `opencv-contrib-python`, con coincidencia de plantilla y detección HSV/contornos como alternativas.
 - Filtros que priorizan el patrón de color de la pelota y descartan regiones predominantemente negras y coincidencias poco plausibles del fondo.
 - Cuatro destinos con colores fijos de trayectoria:
@@ -44,7 +44,7 @@ En macOS/Linux, activa el entorno con `source .venv/bin/activate`.
 
 1. Pulsa **Open video** y selecciona un archivo MP4, MOV, AVI, MKV o M4V.
 2. Pausa en un fotograma donde la pelota sea claramente visible.
-3. Pulsa **Draw ball circle**, haz clic en el centro de la pelota y arrastra hasta su borde. El círculo define el diámetro, inicia el tiempo e inicializa el tracker.
+3. Si quieres calibrar el tamaño, pulsa **Draw radius**, haz clic en el centro y arrastra hasta el borde. Después pulsa **Select ball centre** y haz un clic sobre el centro para iniciar el tracker.
 4. Selecciona **Punta**, **Pipe**, **Opuesto** o **Central**. Las teclas `1`–`4` sirven como atajos.
 5. Pulsa `Espacio` cuando termine la colocación. La tabla registra su duración y la trayectoria pasa a ser un segmento coloreado terminado.
 6. Selecciona una fila y utiliza **Show / hide selected trail**, o haz doble clic, para consultar colocaciones concretas.
@@ -54,7 +54,7 @@ En macOS/Linux, activa el entorno con `source .venv/bin/activate`.
 
 ## Notas sobre el tracking
 
-La inicialización manual se recomienda para pelotas rojas, amarillas y blancas y para jugadas con muchos estímulos. El círculo debe cubrir el balón completo sin incluir demasiado fondo; CSRT sigue esa región y no únicamente el punto más brillante. Si la pelota queda totalmente ocluida o CSRT se desvía, pausa y vuelve a dibujar el círculo en un fotograma donde sea visible.
+La inicialización manual se recomienda para pelotas rojas, amarillas y blancas y para jugadas con muchos estímulos. **Draw radius** actualiza automáticamente los radios mínimo y máximo con un margen de tolerancia; el tracking sigue iniciándose con un clic en el centro. Si la pelota queda totalmente ocluida o CSRT se desvía, pausa y vuelve a seleccionarla en un fotograma donde sea visible.
 
 Los puntos de extensión del tracking son `create_visual_tracker()`, `track_selected_ball()` y `detect_ball()` en `app.py`. Más adelante se pueden sustituir por optical flow, un filtro de Kalman o un detector entrenado con el ángulo de cámara del club.
 

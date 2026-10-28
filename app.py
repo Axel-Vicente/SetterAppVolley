@@ -53,6 +53,7 @@ class SetterApp:
         self.updating_seek = False
         self.last_ball: tuple[int, int] | None = None
         self.awaiting_ball_click = False
+        self.selection_mode = "center"
         self.circle_center: tuple[int, int] | None = None
         self.circle_preview_radius = 0
         self.circle_preview_id: int | None = None
@@ -127,10 +128,11 @@ class SetterApp:
         self.record_button = ttk.Button(sidebar, text="Mark placement (Space)", style="Primary.TButton", command=self.record_placement, state="disabled"); self.record_button.grid(row=2, column=0, sticky="ew", pady=(0, 14))
         ttk.Label(sidebar, text="Tracking", style="Panel.TLabel", font=("Segoe UI", 12, "bold")).grid(row=3, column=0, sticky="w", pady=(0, 6))
         ttk.Checkbutton(sidebar, text="Detect ball", variable=self.tracking).grid(row=4, column=0, sticky="w"); ttk.Checkbutton(sidebar, text="Show trail", variable=self.show_overlay).grid(row=5, column=0, sticky="w", pady=(0, 7))
-        ttk.Button(sidebar, text="Draw ball circle", command=self.start_ball_selection).grid(row=6, column=0, sticky="ew", pady=(2, 7))
+        ttk.Button(sidebar, text="Select ball centre", command=self.start_ball_selection).grid(row=6, column=0, sticky="ew", pady=(2, 7))
         ttk.Label(sidebar, text="Minimum / maximum radius", style="Panel.TLabel").grid(row=7, column=0, sticky="w")
         radius = ttk.Frame(sidebar); radius.grid(row=7, column=0, sticky="ew")
         ttk.Spinbox(radius, from_=2, to=100, textvariable=self.min_radius, width=6).pack(side="left"); ttk.Label(radius, text=" - ").pack(side="left"); ttk.Spinbox(radius, from_=5, to=150, textvariable=self.max_radius, width=6).pack(side="left")
+        ttk.Button(radius, text="Draw radius", command=self.start_radius_calibration).pack(side="right", padx=(6, 0))
         radius.grid(row=8)
         ttk.Button(sidebar, text="Clear trail", command=self.clear_trail).grid(row=9, column=0, sticky="ew", pady=(10, 4))
         export_frame = ttk.Frame(sidebar, style="Panel.TFrame"); export_frame.grid(row=10, column=0, sticky="ew", pady=(0, 6)); export_frame.columnconfigure(0, weight=1); export_frame.columnconfigure(1, weight=1)
@@ -203,8 +205,17 @@ class SetterApp:
         if not self.cap:
             self.status.configure(text="Open a video before selecting the ball")
             return
+        self.selection_mode = "center"
         self.awaiting_ball_click = True
-        self.status.configure(text="Click the ball centre and drag to its edge")
+        self.status.configure(text="Click once on the centre of the ball")
+
+    def start_radius_calibration(self) -> None:
+        if not self.cap:
+            self.status.configure(text="Open a video before drawing the radius")
+            return
+        self.selection_mode = "radius"
+        self.awaiting_ball_click = True
+        self.status.configure(text="Click the ball centre and drag to its edge to set min/max radius")
 
     def canvas_to_source(self, event) -> tuple[int, int] | None:
         if not self.cap or not hasattr(self, "raw_frame") or self.display_scale <= 0: return None
@@ -221,7 +232,7 @@ class SetterApp:
         self.update_circle_preview()
 
     def update_ball_circle(self, event) -> None:
-        if self.circle_center is None: return
+        if self.circle_center is None or self.selection_mode != "radius": return
         point = self.canvas_to_source(event)
         if point is None: return
         self.circle_preview_radius = max(1, int(math.hypot(point[0] - self.circle_center[0], point[1] - self.circle_center[1])))
@@ -242,10 +253,16 @@ class SetterApp:
         center, radius = self.circle_center, self.circle_preview_radius
         if self.circle_preview_id is not None: self.canvas.delete(self.circle_preview_id)
         self.circle_preview_id = None; self.circle_center = None
+        if self.selection_mode == "center":
+            self.initialize_ball_tracker(center, max(4, int((self.min_radius.get() + self.max_radius.get()) / 2)))
+            return
         if radius < 4:
             self.status.configure(text="The circle is too small; drag from the centre to the ball edge")
             return
-        self.initialize_ball_tracker(center, radius)
+        self.min_radius.set(max(2, int(radius * 0.75)))
+        self.max_radius.set(max(self.min_radius.get() + 1, int(radius * 1.35)))
+        self.awaiting_ball_click = False
+        self.status.configure(text=f"Radius calibrated: {radius}px (min {self.min_radius.get()}, max {self.max_radius.get()})")
 
     def initialize_ball_tracker(self, center: tuple[int, int], radius: int) -> None:
         if not self.awaiting_ball_click or not self.cap or not hasattr(self, "raw_frame"):
@@ -370,12 +387,30 @@ class SetterApp:
     def draw_overlay(self, frame) -> None:
         for segment in self.completed_trails:
             if not segment.visible: continue
-            for first, second in zip(segment.points, segment.points[1:]): cv2.line(frame, first, second, segment.color, 2, cv2.LINE_AA)
+            self.draw_smooth_polyline(frame, segment.points, segment.color, 3)
             if segment.points:
                 cv2.circle(frame, segment.points[-1], 11, (12, 12, 12), -1, cv2.LINE_AA); cv2.circle(frame, segment.points[-1], 8, segment.color, -1, cv2.LINE_AA)
         current_color = self.TARGETS[self.selected_position.get()][1]
-        for first, second in zip(self.trail, self.trail[1:]): cv2.line(frame, first, second, current_color, 2, cv2.LINE_AA)
+        self.draw_smooth_polyline(frame, self.trail, current_color, 3)
         if self.trail: cv2.circle(frame, self.trail[-1], 8, current_color, 2, cv2.LINE_AA)
+
+    @staticmethod
+    def smooth_points(points: list[tuple[int, int]], steps: int = 5) -> list[tuple[int, int]]:
+        if len(points) < 3: return points
+        smoothed: list[tuple[int, int]] = []
+        for index in range(len(points) - 1):
+            p0 = points[max(0, index - 1)]; p1 = points[index]; p2 = points[index + 1]; p3 = points[min(len(points) - 1, index + 2)]
+            for step in range(steps):
+                t = step / steps; t2 = t * t; t3 = t2 * t
+                x = 0.5 * ((2 * p1[0]) + (-p0[0] + p2[0]) * t + (2 * p0[0] - 5 * p1[0] + 4 * p2[0] - p3[0]) * t2 + (-p0[0] + 3 * p1[0] - 3 * p2[0] + p3[0]) * t3)
+                y = 0.5 * ((2 * p1[1]) + (-p0[1] + p2[1]) * t + (2 * p0[1] - 5 * p1[1] + 4 * p2[1] - p3[1]) * t2 + (-p0[1] + 3 * p1[1] - 3 * p2[1] + p3[1]) * t3)
+                smoothed.append((round(x), round(y)))
+        smoothed.append(points[-1])
+        return smoothed
+
+    def draw_smooth_polyline(self, frame, points: list[tuple[int, int]], color, width: int) -> None:
+        smooth = self.smooth_points(points)
+        for first, second in zip(smooth, smooth[1:]): cv2.line(frame, first, second, color, width, cv2.LINE_AA)
 
     def record_placement(self) -> None:
         if not self.cap: return
@@ -472,8 +507,7 @@ class SetterApp:
         for segment in self.completed_trails:
             if not segment.visible: continue
             points = [point for point, point_frame in zip(segment.points, segment.frame_indices) if point_frame <= frame_index]
-            if len(points) > 1:
-                for first, second in zip(points, points[1:]): cv2.line(frame, first, second, segment.color, 2, cv2.LINE_AA)
+            if len(points) > 1: self.draw_smooth_polyline(frame, points, segment.color, 3)
             if points and segment.frame_indices and frame_index >= segment.frame_indices[-1]:
                 cv2.circle(frame, points[-1], 11, (12, 12, 12), -1, cv2.LINE_AA); cv2.circle(frame, points[-1], 8, segment.color, -1, cv2.LINE_AA)
 

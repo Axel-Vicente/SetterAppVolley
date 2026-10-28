@@ -5,7 +5,7 @@ SetterApp Volley is a desktop video-analysis tool for volleyball coaches. It is 
 ## Features
 
 - Local video playback with pause, frame seeking, and timeline navigation.
-- Manual ball initialization by drawing a circle over the ball; the circle defines the tracking diameter.
+- Manual ball initialization by clicking the ball centre; the diameter is calibrated separately with **Draw radius** in the radius controls.
 - CSRT tracking through `opencv-contrib-python`, with template matching and HSV/contour detection as fallbacks.
 - Filters that prioritize the ball's colour pattern and reject predominantly black regions and implausible background matches.
 - Four placement targets with fixed trail colours:
@@ -44,7 +44,7 @@ On macOS/Linux, activate the environment with `source .venv/bin/activate`.
 
 1. Click **Open video** and select an MP4, MOV, AVI, MKV, or M4V file.
 2. Pause on a frame where the ball is clearly visible.
-3. Press **Draw ball circle**, click the ball centre, and drag to its edge. The circle defines the diameter, starts the timing, and initializes the tracker.
+3. To calibrate size, press **Draw radius**, click the ball centre, and drag to its edge. Then press **Select ball centre** and click once on the centre to initialize the tracker.
 4. Select **Punta**, **Pipe**, **Opuesto**, or **Central**. The number keys `1`–`4` are shortcuts.
 5. Press `Space` when the placement ends. The table records its duration and the trajectory becomes a completed coloured segment.
 6. Select a table row and use **Show / hide selected trail**, or double-click the row, to focus on specific placements.
@@ -54,7 +54,7 @@ On macOS/Linux, activate the environment with `source .venv/bin/activate`.
 
 ## Tracking notes
 
-Manual initialization is recommended for red/yellow/white balls and busy scenes. The circle should cover the full ball without including too much background; CSRT tracks that region rather than only the brightest point. If the ball becomes fully occluded or CSRT drifts, pause and draw the circle again on a visible frame.
+Manual initialization is recommended for red/yellow/white balls and busy scenes. **Draw radius** updates the minimum and maximum radius with a tolerance margin; tracking itself still starts with a centre click. If the ball becomes fully occluded or CSRT drifts, pause and select it again on a visible frame.
 
 The tracking extension points are `create_visual_tracker()`, `track_selected_ball()`, and `detect_ball()` in `app.py`. They can later be replaced by optical flow, a Kalman filter, or a detector trained on the club's camera angle.
 
@@ -62,7 +62,7 @@ The tracking extension points are `create_visual_tracker()`, `track_selected_bal
 
 - If CSRT is unavailable, reinstall with `python -m pip install -r requirements.txt`; the project requires `opencv-contrib-python`.
 - If the ball is lost, pause and select it again while clearly visible.
-- If the manually drawn circle is too small or large, repeat **Draw ball circle** and drag precisely from the ball centre to its edge.
+- If the radius calibration is too small or large, repeat **Draw radius** and drag precisely from the ball centre to its edge.
 - If a white ceiling causes a false match, reinitialize the tracker; colour and saturation are used in addition to brightness.
 - If the video cannot be decoded, convert it to H.264 MP4.
 
