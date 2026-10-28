@@ -18,6 +18,8 @@ SetterApp Volley es una herramienta de escritorio para entrenadores de voleibol.
 - Las trayectorias registradas se pueden mostrar u ocultar de forma independiente desde la tabla. El doble clic sobre una fila alterna su visibilidad.
 - **Clear trail** solo elimina la trayectoria activa no registrada. Las trayectorias guardadas solo se eliminan al borrar su registro.
 - Exportación CSV con destino, inicio, fin y duración.
+- Exportación de un vídeo anotado con las trayectorias visibles y círculos finales. El vídeo se genera sin audio.
+- Exportación de una plantilla JSON con puntos, fotogramas, colores, visibilidad y tiempos para reutilizar el análisis.
 - Logo del club e interfaz con tema rojo, negro y grises.
 
 ## Requisitos
@@ -48,6 +50,7 @@ En macOS/Linux, activa el entorno con `source .venv/bin/activate`.
 6. Selecciona una fila y utiliza **Show / hide selected trail**, o haz doble clic, para consultar colocaciones concretas.
 7. Usa **Clear trail** solo para descartar el segmento activo no registrado. Usa **Delete selected record** para eliminar una colocación terminada y su trayectoria.
 8. Pulsa **Export CSV** para guardar el análisis.
+9. Pulsa **Export video** para crear un MP4 anotado con las trayectorias que estén visibles en la tabla. Pulsa **Export trail template** para guardar los datos geométricos en JSON.
 
 ## Notas sobre el tracking
 

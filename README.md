@@ -18,6 +18,8 @@ SetterApp Volley is a desktop video-analysis tool for volleyball coaches. It is 
 - Registered trails can be shown or hidden independently from the timing table. Double-clicking a row toggles visibility.
 - `Clear trail` removes only the active, unregistered trail. Registered trails are removed only when their placement record is deleted.
 - CSV export with target, start time, end time, and duration.
+- Export of an annotated video with visible trails and endpoint circles. The generated video does not include audio.
+- Export of a JSON trail template containing points, frame indices, colours, visibility, and timings for reuse.
 - Club logo and red/black/grey visual theme.
 
 ## Requirements
@@ -48,6 +50,7 @@ On macOS/Linux, activate the environment with `source .venv/bin/activate`.
 6. Select a table row and use **Show / hide selected trail**, or double-click the row, to focus on specific placements.
 7. Use **Clear trail** only to discard the current unregistered segment. Use **Delete selected record** to remove a completed placement and its trajectory.
 8. Click **Export CSV** to save the analysis.
+9. Click **Export video** to create an annotated MP4 using the trails currently visible in the table. Click **Export trail template** to save the geometry as JSON.
 
 ## Tracking notes
 

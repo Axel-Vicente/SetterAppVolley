@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import json
 import math
 import os
 import traceback
@@ -26,6 +27,7 @@ class Placement:
 @dataclass
 class TrailSegment:
     points: list[tuple[int, int]]
+    frame_indices: list[int]
     color: tuple[int, int, int]
     visible: bool = True
 
@@ -68,6 +70,7 @@ class SetterApp:
         self.min_radius, self.max_radius = tk.IntVar(value=3), tk.IntVar(value=60)
         self.saturation, self.value = tk.IntVar(value=45), tk.IntVar(value=80)
         self.trail: list[tuple[int, int]] = []
+        self.trail_frames: list[int] = []
         self.placements: list[Placement] = []
         self.placement_start_timestamp: float | None = None
         self.photo: ImageTk.PhotoImage | None = None
@@ -124,15 +127,19 @@ class SetterApp:
         radius = ttk.Frame(sidebar); radius.grid(row=7, column=0, sticky="ew")
         ttk.Spinbox(radius, from_=2, to=100, textvariable=self.min_radius, width=6).pack(side="left"); ttk.Label(radius, text=" - ").pack(side="left"); ttk.Spinbox(radius, from_=5, to=150, textvariable=self.max_radius, width=6).pack(side="left")
         radius.grid(row=8)
-        ttk.Button(sidebar, text="Clear trail", command=self.clear_trail).grid(row=9, column=0, sticky="ew", pady=(10, 4)); ttk.Button(sidebar, text="Export CSV", command=self.export_csv).grid(row=10, column=0, sticky="ew", pady=(0, 6))
-        ttk.Button(sidebar, text="Delete selected record", style="Danger.TButton", command=self.delete_selected_placement).grid(row=11, column=0, sticky="ew", pady=(0, 4))
-        ttk.Button(sidebar, text="Delete all records", style="Danger.TButton", command=self.delete_all_placements).grid(row=12, column=0, sticky="ew", pady=(0, 14))
-        ttk.Label(sidebar, text="Registered timings", style="Panel.TLabel", font=("Segoe UI", 12, "bold")).grid(row=13, column=0, sticky="w", pady=(0, 6))
-        self.table = ttk.Treeview(sidebar, columns=("n", "position", "duration", "visible"), show="headings", height=12); self.table.grid(row=14, column=0, sticky="nsew"); sidebar.rowconfigure(14, weight=1)
+        ttk.Button(sidebar, text="Clear trail", command=self.clear_trail).grid(row=9, column=0, sticky="ew", pady=(10, 4))
+        export_frame = ttk.Frame(sidebar, style="Panel.TFrame"); export_frame.grid(row=10, column=0, sticky="ew", pady=(0, 6)); export_frame.columnconfigure(0, weight=1); export_frame.columnconfigure(1, weight=1)
+        ttk.Button(export_frame, text="Export CSV", command=self.export_csv).grid(row=0, column=0, sticky="ew", padx=(0, 3))
+        ttk.Button(export_frame, text="Export video", style="Primary.TButton", command=self.export_annotated_video).grid(row=0, column=1, sticky="ew", padx=(3, 0))
+        ttk.Button(sidebar, text="Export trail template", command=self.export_trail_template).grid(row=11, column=0, sticky="ew", pady=(0, 6))
+        ttk.Button(sidebar, text="Delete selected record", style="Danger.TButton", command=self.delete_selected_placement).grid(row=12, column=0, sticky="ew", pady=(0, 4))
+        ttk.Button(sidebar, text="Delete all records", style="Danger.TButton", command=self.delete_all_placements).grid(row=13, column=0, sticky="ew", pady=(0, 14))
+        ttk.Label(sidebar, text="Registered timings", style="Panel.TLabel", font=("Segoe UI", 12, "bold")).grid(row=14, column=0, sticky="w", pady=(0, 6))
+        self.table = ttk.Treeview(sidebar, columns=("n", "position", "duration", "visible"), show="headings", height=12); self.table.grid(row=15, column=0, sticky="nsew"); sidebar.rowconfigure(15, weight=1)
         for column, title, width in (("n", "#", 35), ("position", "Target", 90), ("duration", "Duration", 85), ("visible", "Trail", 65)): self.table.heading(column, text=title); self.table.column(column, width=width, anchor="center")
         self.table.bind("<Double-1>", lambda _event: self.toggle_selected_trails())
-        ttk.Button(sidebar, text="Show / hide selected trail", command=self.toggle_selected_trails).grid(row=15, column=0, sticky="ew", pady=(8, 4))
-        self.status = ttk.Label(sidebar, text="Ready. Open a video.", style="Panel.TLabel", foreground="#a1a1aa", wraplength=300); self.status.grid(row=16, column=0, sticky="sw", pady=(10, 0))
+        ttk.Button(sidebar, text="Show / hide selected trail", command=self.toggle_selected_trails).grid(row=16, column=0, sticky="ew", pady=(8, 4))
+        self.status = ttk.Label(sidebar, text="Ready. Open a video.", style="Panel.TLabel", foreground="#a1a1aa", wraplength=300); self.status.grid(row=17, column=0, sticky="sw", pady=(10, 0))
 
     def open_video(self) -> None:
         path = filedialog.askopenfilename(title="Select video", filetypes=[("Videos", "*.mp4 *.mov *.avi *.mkv *.m4v"), ("All files", "*.*")])
@@ -145,7 +152,7 @@ class SetterApp:
             if frame_count <= 0: raise ValueError("The video contains no readable frames.")
             if self.cap: self.cap.release()
             self.cap, self.video_path = candidate, path; self.fps, self.frame_count, self.frame_index = fps, frame_count, 0
-            self.trail.clear(); self.completed_trails.clear(); self.last_ball = None; self.tracker_template = None; self.cv_tracker = None; self.tracker_template_gray = None; self.tracker_template_hsv = None; self.tracker_color_hist = None; self.placements.clear(); self.placement_start_timestamp = None
+            self.trail.clear(); self.trail_frames.clear(); self.completed_trails.clear(); self.last_ball = None; self.tracker_template = None; self.cv_tracker = None; self.tracker_template_gray = None; self.tracker_template_hsv = None; self.tracker_color_hist = None; self.placements.clear(); self.placement_start_timestamp = None
             for item in self.table.get_children(): self.table.delete(item)
             self.seek.configure(to=max(1, frame_count - 1)); self.play_button.configure(state="normal"); self.record_button.configure(state="normal")
             self.status.configure(text=f"{os.path.basename(path)} - {fps:.2f} fps"); self.show_frame()
@@ -174,7 +181,8 @@ class SetterApp:
         self.raw_frame = frame.copy()
         if self.tracking.get():
             point = self.track_selected_ball(frame) if self.tracker_template is not None else self.detect_ball(frame)
-            if point: self.trail.append(point)
+            if point:
+                self.trail.append(point); self.trail_frames.append(self.frame_index)
         if self.show_overlay.get(): self.draw_overlay(frame)
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB); image = Image.fromarray(rgb); image.thumbnail((self.canvas.winfo_width() or 900, self.canvas.winfo_height() or 600), Image.Resampling.LANCZOS)
         source_height, source_width = self.raw_frame.shape[:2]
@@ -212,7 +220,7 @@ class SetterApp:
         self.tracker_template_hsv = cv2.cvtColor(template, cv2.COLOR_BGR2HSV)
         self.tracker_color_hist = self.build_color_histogram(self.tracker_template_hsv)
         self.tracker_lost_frames = 0
-        self.last_ball = (x, y); self.trail.append((x, y)); self.placement_start_timestamp = self.frame_index / self.fps; self.awaiting_ball_click = False
+        self.last_ball = (x, y); self.trail.append((x, y)); self.trail_frames.append(self.frame_index); self.placement_start_timestamp = self.frame_index / self.fps; self.awaiting_ball_click = False
         self.cv_tracker = self.create_visual_tracker()
         if self.cv_tracker is not None:
             bbox = (x1, y1, x2 - x1, y2 - y1)
@@ -336,8 +344,8 @@ class SetterApp:
         duration = max(0.0, timestamp - start)
         target_name, target_color = self.TARGETS[self.selected_position.get()]
         placement = Placement(len(self.placements) + 1, target_name, start, timestamp, duration); self.placements.append(placement)
-        self.completed_trails.append(TrailSegment(list(self.trail), target_color))
-        self.trail.clear()
+        self.completed_trails.append(TrailSegment(list(self.trail), list(self.trail_frames), target_color))
+        self.trail.clear(); self.trail_frames.clear()
         self.placement_start_timestamp = timestamp
         self.table.insert("", "end", values=(placement.number, placement.position, f"{duration:.3f} s", "Shown")); self.status.configure(text=f"Marked {placement.position}: {duration:.3f} s")
 
@@ -345,7 +353,7 @@ class SetterApp:
         # Only discard the in-progress trajectory. Completed trajectories are
         # owned by their placement record and can only be removed by deleting
         # that record; visibility is handled independently by the table.
-        self.trail.clear(); self.last_ball = None; self.status.configure(text="Active trail cleared; registered trails kept"); self.show_frame()
+        self.trail.clear(); self.trail_frames.clear(); self.last_ball = None; self.status.configure(text="Active trail cleared; registered trails kept"); self.show_frame()
 
     def delete_selected_placement(self) -> None:
         selected = self.table.selection()
@@ -362,7 +370,7 @@ class SetterApp:
     def delete_all_placements(self) -> None:
         if not self.placements: return
         if not messagebox.askyesno("Delete records", "Delete all registered placements?"): return
-        self.placements.clear(); self.completed_trails.clear(); self.trail.clear(); self.placement_start_timestamp = None; self.refresh_placements_table(); self.status.configure(text="All placement records deleted")
+        self.placements.clear(); self.completed_trails.clear(); self.trail.clear(); self.trail_frames.clear(); self.placement_start_timestamp = None; self.refresh_placements_table(); self.status.configure(text="All placement records deleted")
 
     def refresh_placements_table(self) -> None:
         for item in self.table.get_children(): self.table.delete(item)
@@ -389,6 +397,59 @@ class SetterApp:
             writer = csv.writer(handle); writer.writerow(["number", "target", "start_s", "end_s", "duration_s"])
             for item in self.placements: writer.writerow([item.number, item.position, f"{item.start_timestamp:.3f}", f"{item.end_timestamp:.3f}", f"{item.duration:.3f}"])
         self.status.configure(text=f"CSV saved: {os.path.basename(path)}")
+
+    def export_annotated_video(self) -> None:
+        if not self.cap or not self.video_path:
+            messagebox.showinfo("Export video", "Open a video and register at least one placement first.")
+            return
+        if not self.completed_trails:
+            messagebox.showinfo("Export video", "Register at least one placement before exporting the annotated video.")
+            return
+        path = filedialog.asksaveasfilename(defaultextension=".mp4", filetypes=[("MP4 video", "*.mp4")], initialfile="setter_analysis_annotated.mp4")
+        if not path: return
+        source = cv2.VideoCapture(self.video_path)
+        width = int(source.get(cv2.CAP_PROP_FRAME_WIDTH)); height = int(source.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        fps = source.get(cv2.CAP_PROP_FPS) or self.fps; total = int(source.get(cv2.CAP_PROP_FRAME_COUNT))
+        writer = cv2.VideoWriter(path, cv2.VideoWriter_fourcc(*"mp4v"), fps, (width, height))
+        if not source.isOpened() or not writer.isOpened():
+            source.release(); writer.release(); self.show_error("Export video", "The source or output video could not be opened."); return
+        try:
+            index = 0
+            while True:
+                ok, frame = source.read()
+                if not ok: break
+                self.draw_export_overlay(frame, index)
+                writer.write(frame); index += 1
+                if index % 30 == 0:
+                    self.status.configure(text=f"Exporting video... {index / max(1, total) * 100:.0f}%")
+                    self.root.update_idletasks()
+        finally:
+            source.release(); writer.release()
+        self.status.configure(text=f"Annotated video saved: {os.path.basename(path)}")
+        messagebox.showinfo("Export video", "Annotated video exported without audio.")
+
+    def draw_export_overlay(self, frame, frame_index: int) -> None:
+        for segment in self.completed_trails:
+            if not segment.visible: continue
+            points = [point for point, point_frame in zip(segment.points, segment.frame_indices) if point_frame <= frame_index]
+            if len(points) > 1:
+                for first, second in zip(points, points[1:]): cv2.line(frame, first, second, segment.color, 2, cv2.LINE_AA)
+            if points and segment.frame_indices and frame_index >= segment.frame_indices[-1]:
+                cv2.circle(frame, points[-1], 11, (12, 12, 12), -1, cv2.LINE_AA); cv2.circle(frame, points[-1], 8, segment.color, -1, cv2.LINE_AA)
+
+    def export_trail_template(self) -> None:
+        if not self.placements:
+            messagebox.showinfo("Export template", "Register at least one placement first.")
+            return
+        path = filedialog.asksaveasfilename(defaultextension=".json", filetypes=[("JSON template", "*.json")], initialfile="setter_trail_template.json")
+        if not path: return
+        payload = {
+            "video": os.path.basename(self.video_path), "fps": self.fps,
+            "placements": [{"number": item.number, "target": item.position, "start_s": item.start_timestamp, "end_s": item.end_timestamp, "duration_s": item.duration} for item in self.placements],
+            "trails": [{"points": segment.points, "frame_indices": segment.frame_indices, "color_bgr": segment.color, "visible": segment.visible} for segment in self.completed_trails],
+        }
+        with open(path, "w", encoding="utf-8") as handle: json.dump(payload, handle, ensure_ascii=False, indent=2)
+        self.status.configure(text=f"Trail template saved: {os.path.basename(path)}")
 
     @staticmethod
     def format_time(seconds: float) -> str:
