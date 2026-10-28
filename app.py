@@ -108,6 +108,7 @@ class SetterApp:
             ttk.Label(header, image=self.logo_photo).pack(side="left", padx=(0, 10))
         ttk.Label(header, text="SetterApp Volley", style="Header.TLabel").pack(side="left")
         ttk.Label(header, text=" - video analysis", font=("Segoe UI", 10)).pack(side="left", pady=5)
+        ttk.Label(header, text="Desarrollado por Axel Vicente Magaña", style="Footer.TLabel").pack(side="left", padx=(16, 0), pady=5)
         ttk.Button(header, text="Open video", style="Primary.TButton", command=self.open_video).pack(side="right")
         main = ttk.Frame(self.root, padding=(18, 0, 18, 18)); main.pack(fill="both", expand=True)
         main.columnconfigure(0, weight=3); main.columnconfigure(1, weight=1); main.rowconfigure(0, weight=1)
