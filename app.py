@@ -53,6 +53,9 @@ class SetterApp:
         self.updating_seek = False
         self.last_ball: tuple[int, int] | None = None
         self.awaiting_ball_click = False
+        self.circle_center: tuple[int, int] | None = None
+        self.circle_preview_radius = 0
+        self.circle_preview_id: int | None = None
         self.tracker_template = None
         self.cv_tracker = None
         self.tracker_template_gray = None
@@ -76,7 +79,9 @@ class SetterApp:
         self.photo: ImageTk.PhotoImage | None = None
         self._build_ui()
         self.root.report_callback_exception = self.report_callback_exception
-        self.canvas.bind("<Button-1>", self.select_ball_from_canvas)
+        self.canvas.bind("<ButtonPress-1>", self.begin_ball_circle)
+        self.canvas.bind("<B1-Motion>", self.update_ball_circle)
+        self.canvas.bind("<ButtonRelease-1>", self.finish_ball_circle)
         self.root.bind("<space>", lambda _event: self.record_placement())
         for number in range(1, 5):
             self.root.bind(str(number), lambda _event, n=number: self.selected_position.set(n))
@@ -122,7 +127,7 @@ class SetterApp:
         self.record_button = ttk.Button(sidebar, text="Mark placement (Space)", style="Primary.TButton", command=self.record_placement, state="disabled"); self.record_button.grid(row=2, column=0, sticky="ew", pady=(0, 14))
         ttk.Label(sidebar, text="Tracking", style="Panel.TLabel", font=("Segoe UI", 12, "bold")).grid(row=3, column=0, sticky="w", pady=(0, 6))
         ttk.Checkbutton(sidebar, text="Detect ball", variable=self.tracking).grid(row=4, column=0, sticky="w"); ttk.Checkbutton(sidebar, text="Show trail", variable=self.show_overlay).grid(row=5, column=0, sticky="w", pady=(0, 7))
-        ttk.Button(sidebar, text="Select ball on video", command=self.start_ball_selection).grid(row=6, column=0, sticky="ew", pady=(2, 7))
+        ttk.Button(sidebar, text="Draw ball circle", command=self.start_ball_selection).grid(row=6, column=0, sticky="ew", pady=(2, 7))
         ttk.Label(sidebar, text="Minimum / maximum radius", style="Panel.TLabel").grid(row=7, column=0, sticky="w")
         radius = ttk.Frame(sidebar); radius.grid(row=7, column=0, sticky="ew")
         ttk.Spinbox(radius, from_=2, to=100, textvariable=self.min_radius, width=6).pack(side="left"); ttk.Label(radius, text=" - ").pack(side="left"); ttk.Spinbox(radius, from_=5, to=150, textvariable=self.max_radius, width=6).pack(side="left")
@@ -199,19 +204,54 @@ class SetterApp:
             self.status.configure(text="Open a video before selecting the ball")
             return
         self.awaiting_ball_click = True
-        self.status.configure(text="Click directly on the ball in the video")
+        self.status.configure(text="Click the ball centre and drag to its edge")
 
-    def select_ball_from_canvas(self, event) -> None:
-        if not self.awaiting_ball_click or not self.cap or not hasattr(self, "raw_frame"):
-            return
+    def canvas_to_source(self, event) -> tuple[int, int] | None:
+        if not self.cap or not hasattr(self, "raw_frame") or self.display_scale <= 0: return None
         origin_x, origin_y = self.display_origin
         x = int((event.x - origin_x) / self.display_scale); y = int((event.y - origin_y) / self.display_scale)
         height, width = self.raw_frame.shape[:2]
-        if not (0 <= x < width and 0 <= y < height): return
-        # A large patch includes court lines and players. Keep the reference
-        # tight around the click; it is deliberately never replaced by a
-        # later frame, preventing background contamination.
-        radius = max(12, min(30, self.max_radius.get() * 2))
+        return (x, y) if 0 <= x < width and 0 <= y < height else None
+
+    def begin_ball_circle(self, event) -> None:
+        if not self.awaiting_ball_click: return
+        point = self.canvas_to_source(event)
+        if point is None: return
+        self.circle_center = point; self.circle_preview_radius = 1
+        self.update_circle_preview()
+
+    def update_ball_circle(self, event) -> None:
+        if self.circle_center is None: return
+        point = self.canvas_to_source(event)
+        if point is None: return
+        self.circle_preview_radius = max(1, int(math.hypot(point[0] - self.circle_center[0], point[1] - self.circle_center[1])))
+        self.update_circle_preview()
+
+    def update_circle_preview(self) -> None:
+        if self.circle_center is None: return
+        if self.circle_preview_id is not None: self.canvas.delete(self.circle_preview_id)
+        cx = self.display_origin[0] + self.circle_center[0] * self.display_scale
+        cy = self.display_origin[1] + self.circle_center[1] * self.display_scale
+        radius = self.circle_preview_radius * self.display_scale
+        self.circle_preview_id = self.canvas.create_oval(cx - radius, cy - radius, cx + radius, cy + radius, outline="#e3262e", width=2)
+
+    def finish_ball_circle(self, event) -> None:
+        if self.circle_center is None: return
+        point = self.canvas_to_source(event)
+        if point is not None: self.circle_preview_radius = max(2, int(math.hypot(point[0] - self.circle_center[0], point[1] - self.circle_center[1])))
+        center, radius = self.circle_center, self.circle_preview_radius
+        if self.circle_preview_id is not None: self.canvas.delete(self.circle_preview_id)
+        self.circle_preview_id = None; self.circle_center = None
+        if radius < 4:
+            self.status.configure(text="The circle is too small; drag from the centre to the ball edge")
+            return
+        self.initialize_ball_tracker(center, radius)
+
+    def initialize_ball_tracker(self, center: tuple[int, int], radius: int) -> None:
+        if not self.awaiting_ball_click or not self.cap or not hasattr(self, "raw_frame"):
+            return
+        x, y = center
+        height, width = self.raw_frame.shape[:2]
         self.tracker_patch_radius = radius
         x1, y1, x2, y2 = max(0, x - radius), max(0, y - radius), min(width, x + radius + 1), min(height, y + radius + 1)
         template = self.raw_frame[y1:y2, x1:x2]
